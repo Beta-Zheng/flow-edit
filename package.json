@@ -1,0 +1,17 @@
+{
+  "name": "flow-edit",
+  "version": "0.3.2",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "test": "node build.js && node --test tests",
+    "preview": "node preview-server.js",
+    "release": "node build.js --release"
+  },
+  "devDependencies": {
+    "@codemirror/state": "6.5.2",
+    "@codemirror/view": "6.38.1",
+    "@codemirror/commands": "6.8.1",
+    "jsdom": "26.1.0"
+  }
+}

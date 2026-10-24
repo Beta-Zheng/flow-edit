@@ -1,0 +1,10 @@
+node_modules/
+.npm-cache/
+release/
+*.zip
+flow-edit-preview.html
+host-check.cjs
+screenshots/toolbar-*.png
+verification-*.json
+verification-original-*.md
+data.json

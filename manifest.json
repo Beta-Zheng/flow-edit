@@ -1,0 +1,9 @@
+{
+  "id": "flow-edit",
+  "name": "Flow Edit",
+  "version": "0.3.2",
+  "minAppVersion": "1.5.0",
+  "description": "流式编辑：斜杠插入、块操作与选区格式工具栏，适配任意主题。",
+  "author": "Local",
+  "isDesktopOnly": false
+}
