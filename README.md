@@ -10,6 +10,18 @@
 - **块排版**：设置整块文字色、背景色和对齐，调整列表缩进。
 - **高亮块**：创建或切换 Callout 类型，保留标题和正文。
 
+### 功能截图
+
+基于 0.0.1 源码的浏览器演示，展示编辑控件。
+
+| 内容插入 | 块操作 |
+| --- | --- |
+| ![搜索并插入标题](screenshots/flow-edit-0.0.1-insert.png) | ![块类型转换、复制、移动和删除](screenshots/flow-edit-0.0.1-block-menu.png) |
+
+![选中文字后的格式工具栏，加粗状态已启用](screenshots/flow-edit-0.0.1-selection.png)
+
+![高亮块类型面板](screenshots/flow-edit-0.0.1-callout-types.png)
+
 ## 使用方法
 
 ### 安装与升级
