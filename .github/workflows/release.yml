@@ -1,0 +1,28 @@
+name: Release plugin
+on:
+  push:
+    tags: ['*']
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate exact release tag
+        run: node scripts/validate.cjs --tag "$GITHUB_REF_NAME"
+      - run: npm run check
+      - run: npm run release
+      - run: npm run release:preflight
+      - name: Publish the three Obsidian release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "Flow Edit $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/flow-edit/main.js release/flow-edit/manifest.json release/flow-edit/styles.css

@@ -3,7 +3,12 @@ node_modules/
 release/
 *.zip
 flow-edit-preview.html
-host-check.cjs
+main.js
+.host-build/
+coverage/
+*.log
+.env
+.env.*
 screenshots/toolbar-*.png
 verification-*.json
 verification-original-*.md

@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Flow Edit · 流式编辑</title>
+    <link rel="stylesheet" href="/theme.css" />
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      :root {
+        color-scheme: light;
+        --background-primary: #fff;
+        --background-secondary: #f5f6f8;
+        --background-modifier-border: #e5e7eb;
+        --text-normal: #1f2329;
+        --text-muted: #8f959e;
+        --text-faint: #b1b6bf;
+        --font-interface:
+          Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: var(--text-normal);
+        background: var(--background-primary);
+        font: 14px/1.5 var(--font-interface);
+      }
+      button {
+        cursor: pointer;
+        font: inherit;
+      }
+      button:focus-visible {
+        outline: 2px solid #3370ff;
+        outline-offset: 2px;
+      }
+      body.theme-dark {
+        color-scheme: dark;
+        --background-primary: #1e2025;
+        --background-secondary: #26292f;
+        --background-modifier-border: #383c44;
+        --text-normal: #e5e8ed;
+        --text-muted: #969eac;
+        --text-faint: #69717d;
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 100vh;
+      }
+      .sidebar {
+        background: var(--background-secondary);
+        padding: 24px 15px;
+        border-right: 1px solid var(--background-modifier-border);
+      }
+      .brand {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+        font-size: 17px;
+        font-weight: 650;
+        padding: 2px 9px 30px;
+      }
+      .brand-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        background: #3370ff;
+        color: white;
+        text-align: center;
+        font: italic 23px/28px Georgia;
+      }
+      .nav-label {
+        padding: 14px 10px 8px;
+        color: var(--text-muted);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+      }
+      .nav {
+        padding: 9px 12px;
+        border-radius: 6px;
+        display: flex;
+        gap: 9px;
+        margin: 3px 0;
+      }
+      .nav.active {
+        color: #3370ff;
+        background: #3370ff12;
+      }
+      .sidebar-note {
+        padding: 20px 10px;
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.8;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        height: 66px;
+        padding: 0 34px;
+        border-bottom: 1px solid var(--background-modifier-border);
+      }
+      .crumb {
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+      .crumb span {
+        color: var(--text-normal);
+        margin-left: 12px;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .actions button {
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--text-normal);
+        padding: 7px 12px;
+      }
+      .actions button:hover {
+        background: var(--background-secondary);
+      }
+      .actions button.primary {
+        background: #3370ff;
+        color: white;
+      }
+      .status {
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-right: 8px;
+      }
+      .canvas {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 50px 60px 65px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        color: #3370ff;
+        letter-spacing: 0.15em;
+        font-weight: 600;
+      }
+      .title {
+        font-size: 38px;
+        font-weight: 650;
+        letter-spacing: -0.035em;
+        margin: 10px 0 12px;
+        line-height: 1.4;
+      }
+      .meta {
+        color: var(--text-muted);
+        font-size: 12px;
+        display: flex;
+        gap: 14px;
+        margin-bottom: 30px;
+      }
+      .avatar {
+        display: inline-block;
+        background: #e6efff;
+        color: #3370ff;
+        border-radius: 50%;
+        width: 19px;
+        height: 19px;
+        text-align: center;
+        line-height: 19px;
+        font-size: 10px;
+        vertical-align: middle;
+        margin-right: 5px;
+      }
+      .editor-shell {
+        margin-left: -52px;
+      }
+      .flow-editor .cm-content {
+        padding: 0 0 60px 52px;
+      }
+      .flow-editor .cm-scroller {
+        font-family: var(--font-interface);
+        overflow: visible;
+      }
+      .flow-editor .cm-line {
+        padding: 1px 3px;
+      }
+      .flow-editor .cm-gutters {
+        background: transparent;
+        border: 0;
+      }
+      .flow-editor .cm-line.HyperMD-header-2 {
+        padding-top: 20px;
+        padding-bottom: 8px;
+      }
+      .cm-focused {
+        outline: none !important;
+      }
+      .flow-editor .cm-selectionBackground {
+        background: #3370ff25 !important;
+      }
+      .hint {
+        color: var(--text-muted);
+        border-top: 1px solid var(--background-modifier-border);
+        padding-top: 18px;
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .preview-modal {
+        position: fixed;
+        inset: 0;
+        background: #10142060;
+        display: grid;
+        place-items: center;
+        z-index: 20000;
+      }
+      .preview-modal-box {
+        padding: 26px;
+        border-radius: 12px;
+        background: var(--background-primary);
+        width: min(440px, 90vw);
+      }
+      .preview-modal-box h2 {
+        font-size: 20px;
+        margin: 0 0 15px;
+      }
+      .preview-modal-box input {
+        border: 1px solid var(--background-modifier-border);
+        background: var(--background-secondary);
+        color: var(--text-normal);
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .preview-modal-box button {
+        border: 1px solid var(--background-modifier-border);
+        padding: 7px 16px;
+        border-radius: 5px;
+      }
+      .mod-cta {
+        background: #3370ff;
+        color: white;
+      }
+      .preview-notice {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 12px 20px;
+        border-radius: 8px;
+        background: var(--text-normal);
+        color: var(--background-primary);
+        z-index: 25000;
+        font-size: 13px;
+      }
+      .footer-tag {
+        font-size: 10px;
+        letter-spacing: 0.06em;
+      }
+      .flow-editor .cm-tooltip {
+        border: 0;
+        background: transparent;
+      }
+      @media (max-width: 900px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          display: none;
+        }
+        .canvas {
+          padding: 30px 45px;
+        }
+        .topbar {
+          padding: 0 20px;
+        }
+        .status {
+          display: none;
+        }
+      }
+      @media (max-width: 600px) {
+        .canvas {
+          padding: 28px 28px 45px;
+        }
+        .title {
+          font-size: 29px;
+        }
+        .editor-shell {
+          margin-left: -28px;
+        }
+        .crumb {
+          font-size: 11px;
+        }
+        .actions {
+          gap: 2px;
+        }
+        .actions button {
+          padding: 6px;
+        }
+        .meta {
+          margin-bottom: 22px;
+        }
+        .flow-editor .cm-content {
+          padding-right: 3px;
+          padding-left: 28px;
+        }
+        .hint {
+          gap: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body class="theme-light">
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">f</span>Flow Edit</div>
+        <div class="nav-label">工作空间</div>
+        <div class="nav">⌂ &nbsp; 开始写作</div>
+        <div class="nav-label">我的文档</div>
+        <div class="nav active">▤ &nbsp; 使用指南</div>
+        <div class="nav">▤ &nbsp; 灵感备忘录</div>
+        <div class="nav">▤ &nbsp; 项目计划</div>
+        <div class="sidebar-note">让工具退后一步，<br />让想法向前一步。</div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div class="crumb">我的文档 <span>/ &nbsp;使用指南</span></div>
+          <div class="actions">
+            <span class="status">Flow Edit + Lumen Docs · 可编辑</span
+            ><button id="undo" title="撤销">↶</button
+            ><button id="theme" title="切换深浅主题">◐</button
+            ><button id="insert" class="primary">＋ 插入</button>
+          </div>
+        </header>
+        <article class="canvas">
+          <div class="eyebrow">A CALMER WAY TO WRITE</div>
+          <h1 class="title">Flow Edit，流式编辑</h1>
+          <div class="meta">
+            <span><span class="avatar">F</span>我的工作空间</span><span>Markdown · 本地优先</span>
+          </div>
+          <div class="editor-shell markdown-source-view mod-cm6 is-live-preview">
+            <div id="editor"></div>
+          </div>
+          <footer class="hint">
+            <span>输入 / 插入内容 · 点击左侧手柄管理块</span><span id="count"></span>
+          </footer>
+        </article>
+      </main>
+    </div>
+    <script src="/preview-bundle.js"></script>
+  </body>
+</html>

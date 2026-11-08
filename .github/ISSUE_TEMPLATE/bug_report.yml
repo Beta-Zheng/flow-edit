@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible Flow Edit problem.
+body:
+  - type: markdown
+    attributes:
+      value: Please remove personal note contents, API keys, and vault paths from examples and screenshots.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions and platform
+      description: Flow Edit version, Obsidian version, operating system, and desktop or mobile.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a small sanitized Markdown example and the editing mode.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: theme
+    attributes:
+      label: Theme and other plugins
+      description: Indicate whether the problem also occurs with the default theme and other plugins disabled.

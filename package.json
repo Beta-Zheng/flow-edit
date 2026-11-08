@@ -1,17 +1,43 @@
 {
   "name": "flow-edit",
-  "version": "0.3.2",
+  "version": "0.3.4",
   "private": true,
   "scripts": {
-    "build": "node build.js",
-    "test": "node build.js && node --test tests",
-    "preview": "node preview-server.js",
-    "release": "node build.js --release"
+    "build": "node scripts/build.cjs",
+    "test": "node scripts/build.cjs && node --test",
+    "lint": "eslint src scripts tests build.js eslint.config.mjs --max-warnings 0",
+    "validate": "node scripts/validate.cjs",
+    "check": "npm run format:check && npm run lint && npm run validate && npm test",
+    "preview": "node dev/preview-server.cjs",
+    "preview:build": "node dev/preview-server.cjs --build-only",
+    "release": "node scripts/build.cjs --release && node scripts/validate.cjs --release",
+    "version": "node scripts/version-bump.cjs",
+    "format": "prettier --write src scripts tests dev build.js eslint.config.mjs tsconfig.json package.json manifest.json versions.json .github .prettierrc.json",
+    "format:check": "prettier --check src scripts tests dev build.js eslint.config.mjs tsconfig.json package.json manifest.json versions.json .github .prettierrc.json",
+    "release:preflight": "node scripts/release-preflight.cjs"
   },
   "devDependencies": {
+    "@codemirror/commands": "6.8.1",
     "@codemirror/state": "6.5.2",
     "@codemirror/view": "6.38.1",
-    "@codemirror/commands": "6.8.1",
-    "jsdom": "26.1.0"
+    "@eslint/js": "9.39.5",
+    "@eslint/json": "0.14.0",
+    "eslint": "9.39.5",
+    "eslint-plugin-obsidianmd": "0.4.2",
+    "globals": "14.0.0",
+    "jsdom": "26.1.0",
+    "obsidian": "1.8.7",
+    "prettier": "3.9.10",
+    "typescript": "5.4.5",
+    "typescript-eslint": "8.72.1"
+  },
+  "description": "Markdown editing tools for Obsidian.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "overrides": {
+    "moment": "2.31.0"
   }
 }

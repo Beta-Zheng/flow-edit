@@ -1,6 +1,8 @@
 # Flow Edit · 流式编辑
 
-像文档一样写作，保留 Markdown 的自由。版本 **0.3.2**，以飞书文档的编辑体验为参考，非飞书官方产品。
+像文档一样写作，保留 Markdown 的自由。版本 **0.3.4**，以飞书文档的编辑体验为参考，非飞书官方产品。
+
+Flow Edit adds slash insertion, block actions, callout type selection and a selection formatting toolbar to Obsidian. Notes remain local Markdown; no account or external service is required.
 
 ## 功能概览
 
@@ -16,8 +18,8 @@ Flow Edit 负责编辑交互；Lumen Docs 负责文档外观。两者可分别�
 
 ### 安装
 
-1. 解压 `flow-edit-0.3.2.zip`。
-2. 将其中的 **整个 `flow-edit` 文件夹**放入 `<笔记库>/.obsidian/plugins/`。
+1. 在 [GitHub Releases](https://github.com/Beta-Zheng/flow-edit/releases) 下载同一版本的 `main.js`、`manifest.json` 和 `styles.css`。
+2. 在 `<笔记库>/.obsidian/plugins/` 下创建 `flow-edit` 文件夹，将这三个文件放入其中。使用自定义配置目录时，以实际配置目录替代 `.obsidian`。
 3. 在 Obsidian「设置 → 第三方插件」中启用 **Flow Edit**。若尚未出现，重启 Obsidian。
 4. 建议使用「实时预览」。如果启用了 Obsidian 核心「斜杠命令」插件，请先停用它，避免两个斜杠菜单竞争。
 
@@ -35,7 +37,7 @@ Flow Edit 负责编辑交互；Lumen Docs 负责文档外观。两者可分别�
 
 升级时先停用插件，覆盖上述三个文件，保留个人设置 `data.json`，再启用。无需 Node.js、账号或后台服务。
 
-从本仓库安装时，可直接将根目录的 `main.js`、`manifest.json`、`styles.css` 复制到上述目录；这三个文件就是运行所需文件。`release/` 和 ZIP 属于本地构建产物，不纳入源码提交。
+从源码检出后，先按开发说明运行 `npm ci --ignore-scripts` 和 `npm run release`，再复制 `release/flow-edit/`。源码仓库不包含生成的 `main.js`；GitHub Release 提供可直接安装的运行文件。`release/` 和 ZIP 属于本地构建产物，不纳入源码提交。
 
 ### 一分钟上手
 
@@ -57,7 +59,7 @@ Flow Edit 负责编辑交互；Lumen Docs 负责文档外观。两者可分别�
 
 - **斜杠插入**：空行输入 `/`，按中文、英文或 `h1` 等关键词筛选。方向键选择，Enter 插入，Escape 关闭。
 - **块操作**：点击左侧块类型和手柄，或右键选择「Flow Edit · 块操作」。通过带名称与当前状态的「转换块类型」列表选择正文、标题、列表等，不再使用难以辨认的类型图标格。命令面板也有独立的类型入口。
-- **文字格式**：选中文字后，工具栏直接展示块类型、高亮块类型、加粗、斜体、删除线、高亮、行内代码、链接、块颜色、块对齐、无序/有序/任务列表和引用。列表中直接增加缩进按钮，启用本地 feishu-comments 时增加评论按钮。常用操作不再放进「更多」。格式可连续切换，工具栏支持左右方向键导航和窄窗口换行。
+- **文字格式**：选中文字后，工具栏直接展示块类型、高亮块类型、加粗、斜体、删除线、高亮、行内代码、链接、块颜色、块对齐、无序/有序/任务列表和引用。列表中直接增加缩进按钮，启用支持公开接口的批注插件时增加评论按钮。常用操作不再放进「更多」。格式可连续切换，工具栏支持左右方向键导航和窄窗口换行。
 
 ## 高亮块类型
 
@@ -86,7 +88,7 @@ Flow Edit 负责编辑交互；Lumen Docs 负责文档外观。两者可分别�
 | 块管理 | 剪切、复制、创建副本、向上/向下移动、删除、在下方添加、复制块链接 |
 | 块排版 | 左/中/右对齐，7 种文字色、7 种背景选项，清除样式，列表缩进 |
 | 主题适配 | 跟随 Obsidian 当前主题；插件只提供编辑控件和主动设置的块格式 |
-| 批注联动 | 启用本地 `feishu-comments` 插件后显示「评论」入口，调用它的添加批注命令 |
+| 批注联动 | 通过公开 Workspace 事件协议接入批注提供者，配套插件需支持新协议 |
 
 连续的段落行、整个连续列表、引用、代码块、表格分别视为一个块。列表操作会包含其连续子项。块移动使用上移/下移按钮，首版没有鼠标拖放排序。
 
@@ -122,38 +124,33 @@ Flow Edit 负责编辑交互；Lumen Docs 负责文档外观。两者可分别�
 - 深层嵌套、带空行的列表、嵌套围栏、自定义 HTML 和其他插件生成的特殊块不保证完整的语义块识别，请使用源码编辑。列表整体转换为标题或正文会改变列表结构。
 - 阅读模式只对可通过渲染源行范围唯一对应到一个完整 Markdown 块的区块应用颜色和对齐；复杂渲染或聚合区块会跳过样式。不会通过重复文字猜测位置。
 - 没有飞书文档同步、多人协同、在线分享、翻译、子文档和模板管理。
-- 0.3.2 已在真实 Obsidian 1.14.4 下完成 107 项检查，包含拖选时隐藏、完成选择后显示、类型切换、选区保留及与 Lumen Docs 的双向独立性；当前自动测试共 45 项。手机端、其他主题与全功能组合尚未完整验收。浏览器预览中的侧栏、文档标题栏属于演示外壳，安装后使用 Obsidian 自己的界面；预览不读写笔记库。
+- 0.3.2 已在真实 Obsidian 1.14.4 下完成 107 项历史检查，包含拖选时隐藏、完成选择后显示、类型切换、选区保留及与 Lumen Docs 的双向独立性；当前自动测试为 50 项通过，另有 1 项配套主题检查需显式启用。手机端、最低声明版本、其他主题与全功能组合尚未完整验收。浏览器预览中的侧栏、文档标题栏属于演示外壳，安装后使用 Obsidian 自己的界面；预览不读写笔记库。
 
 ## 开发
 
-需要 Node.js 与 npm。在本仓库目录执行：
+需要 Node.js 22.14 或更新版本与 npm。
 
 ```sh
 npm ci --ignore-scripts
-npm test
-npm run build
+npm run check
+npm run format:check
 npm run preview
 npm run release
 ```
 
-`build.js` 将本地模块打包成单独 `main.js`；`obsidian` 和 CodeMirror 由 Obsidian 宿主提供，不打入安装包。开发依赖仅用于测试和浏览器预览。
+运行代码位于 `src/`；构建、发布检查与开发验收工具位于 `scripts/`；浏览器预览位于 `dev/`。生成的 `main.js` 不纳入源码版本管理。正常构建不会包含开发验证命令；`--host-qa` 只写入隔离的 `.host-build/flow-edit/`。
 
-`npm run preview` 启动本地预览，浏览器打开 `http://127.0.0.1:18767`。也可执行 `node preview-server.js --build-only` 生成离线 `flow-edit-preview.html`。`npm run release` 将安装文件写入 `release/flow-edit/`。
+本仓库独立构建和测试，不依赖同级主题目录。可选主题契约检查需要显式设置 `FLOW_EDIT_THEME_DIR`。已有真实 Obsidian 验收记录保留为历史记录，本次规范整理不操作笔记库。
 
-仓库可单独检出和构建。如果同级存在 `lumen-docs/`，预览会加载它，并额外执行主题独立性测试；否则使用预览自身样式并跳过这一项跨仓库测试，插件测试仍照常运行。插件运行和发布包均不依赖该目录。
-
-`host-qa.cjs` 是可选的真实 Obsidian 联合验收工具，要求同时启用 Lumen Docs，并打开专用的 `测试插件.md`。`node build.js --host-qa` 临时加入验证命令；验证会添加测试段落并在结束时恢复，遇到并发编辑会停止覆盖。完成后用 `npm run release` 重建正式版。正式包不含验证命令；本机连接脚本及验证报告不纳入 Git。
-
-- `core.js`：Markdown 块识别、搜索、格式与范围变换。
-- `plugin.js`：Obsidian 生命周期、菜单与命令、设置和编辑事务。
-- `editor.js`：CodeMirror 块手柄、块样式、选区工具栏。
-- `reading.js`：基于源行范围的阅读模式排版。
-- `ui.js` / `styles.css`：共享菜单、颜色面板和视觉样式。
-- `tests/`：正文保护、DOM 交互、真实 CodeMirror 挂载与撤销、剪贴板和独立发布包测试。
-- `preview-server.js` / `preview-client.js` / `preview.html`：预览源码；生成的 `flow-edit-preview.html` 不纳入 Git。
+- [开发与目录说明](CONTRIBUTING.md)
+- [发布流程](RELEASING.md)
+- [插件规范审计](docs/plugin-compliance.md)
+- [批注联动协议](docs/comment-bridge.md)：旧版仅提供私有命令的批注插件需适配新接口。
 
 ## 许可
 
 MIT，详见 [LICENSE](LICENSE)。
+
+遇到问题请提交 [Issue](https://github.com/Beta-Zheng/flow-edit/issues)，附上插件与 Obsidian 版本、编辑模式和可复现的最小示例，请勿上传私人笔记或凭据。GitHub Release 不代表已通过 Obsidian 社区目录审核。
 
 参考：[飞书文档工具栏](https://www.feishu.cn/hc/zh-CN/articles/050365968090-使用文档工具栏)、[飞书快速上手文档](https://www.feishu.cn/hc/zh-CN/articles/945900971706-快速上手文档)、[Obsidian 编辑器接口](https://docs.obsidian.md/Plugins/Editor/Editor)。

@@ -1,6 +1,8 @@
 /* Flow Edit: editor controls and explicit user formatting only. No document theme. */
+.flow-position-probe { position: fixed; left: 0; top: 0; width: 100px; height: 100px; visibility: hidden; pointer-events: none; border: 0; padding: 0; margin: 0; }
+.flow-option-check-hidden { visibility: hidden; }
 .flow-popup, .flow-toolbar, .flow-slash {
-  --flow-accent: #3370ff;
+  --flow-accent: var(--text-accent, #245bdb);
   --flow-hover: rgba(51, 112, 255, .09);
   --flow-border: var(--background-modifier-border, #e2e5ea);
   color: var(--text-normal, #1f2329);
