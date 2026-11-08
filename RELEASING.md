@@ -22,7 +22,7 @@ For manual installation, put this folder under `<vault-config-dir>/plugins/flow-
 
 ## GitHub release
 
-Obsidian downloads **individual** `main.js`, `manifest.json` and `styles.css` assets from the GitHub release whose tag exactly matches `manifest.version`. A ZIP alone is insufficient. The tag must be `0.3.4`, not `v0.3.4`, for this version.
+Obsidian downloads **individual** `main.js`, `manifest.json` and `styles.css` assets from the GitHub release whose tag exactly matches `manifest.version`. A ZIP alone is insufficient. The tag must be `0.0.1`, not `v0.0.1`, for this version.
 
 The release workflow validates that relationship, runs checks, builds normal artifacts and publishes those three assets when a version tag is pushed. Review and commit source changes first. Configure the actual repository/maintainers before intentionally pushing a release tag. No remote publication is performed by the local check/build commands.
 

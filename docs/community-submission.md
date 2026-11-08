@@ -6,7 +6,7 @@
 - Display name: `Flow Edit`
 - Repository owner: `Beta-Zheng`
 - Repository name: `flow-edit`
-- First public release: `0.3.4`
+- First public release: `0.0.1`
 - Author attribution: `Flow Edit contributors`
 - License: MIT
 - Description: Edit Markdown with slash insertion, block actions, callout type selection, and selection formatting.
@@ -15,7 +15,7 @@
 
 - [ ] Confirm the public repository and its default branch contain the current source, manifest, README and LICENSE.
 - [ ] Confirm GitHub CI passes for the source commit.
-- [ ] Confirm release tag `0.3.4` points to that commit and has separate `main.js`, `manifest.json` and `styles.css` assets.
+- [ ] Confirm release tag `0.0.1` points to that commit and has separate `main.js`, `manifest.json` and `styles.css` assets.
 - [ ] Check name/ID availability in the community directory; an absent search result does not reserve a name.
 - [ ] Complete the declared mobile and minimum-version acceptance checks, or adjust the compatibility promise before submission. Current automated checks are not device acceptance.
 - [ ] Sign in to the [Obsidian Community directory](https://community.obsidian.md), link the repository-owning GitHub account, and add the plugin.

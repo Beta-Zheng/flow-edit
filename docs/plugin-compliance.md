@@ -2,6 +2,8 @@
 
 Audit date: 2026-10-27. Scope: the Flow Edit repository, based on the existing 0.3.3 worktree, normalized as 0.3.4. Existing uncommitted work was retained. The separate Lumen Docs theme and user vault are outside the modification scope.
 
+Public versioning was reset to 0.0.1 on 2026-11-08. Version numbers in this audit describe historical development builds, not public releases.
+
 | Area | Project treatment |
 | --- | --- |
 | Metadata | Stable `flow-edit` ID, English action description ending in a period, semantic version, project attribution and synchronized manifests/lockfile. |

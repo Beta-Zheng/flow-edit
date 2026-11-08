@@ -1,7 +1,7 @@
 {
   "id": "flow-edit",
   "name": "Flow Edit",
-  "version": "0.3.4",
+  "version": "0.0.1",
   "minAppVersion": "1.5.0",
   "description": "Edit Markdown with slash insertion, block actions, callout type selection, and selection formatting.",
   "author": "Flow Edit contributors",

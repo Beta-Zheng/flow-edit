@@ -1,6 +1,6 @@
 # Flow Edit · 流式编辑
 
-像文档一样写作，保留 Markdown 的自由。版本 **0.3.4**，以飞书文档的编辑体验为参考，非飞书官方产品。
+像文档一样写作，保留 Markdown 的自由。版本 **0.0.1**，以飞书文档的编辑体验为参考，非飞书官方产品。
 
 Flow Edit adds slash insertion, block actions, callout type selection and a selection formatting toolbar to Obsidian. Notes remain local Markdown; no account or external service is required.
 
@@ -36,6 +36,8 @@ Flow Edit 负责编辑交互；Lumen Docs 负责文档外观。两者可分别�
 ```
 
 升级时先停用插件，覆盖上述三个文件，保留个人设置 `data.json`，再启用。无需 Node.js、账号或后台服务。
+
+首次公开版本从 `0.0.1` 开始编号。此前本地开发版使用 `0.1.x`–`0.3.x`；已安装这些较大编号的版本时，请按上述方式手动覆盖，版本号回调不会被识别为自动升级。
 
 从源码检出后，先按开发说明运行 `npm ci --ignore-scripts` 和 `npm run release`，再复制 `release/flow-edit/`。源码仓库不包含生成的 `main.js`；GitHub Release 提供可直接安装的运行文件。`release/` 和 ZIP 属于本地构建产物，不纳入源码提交。
 
