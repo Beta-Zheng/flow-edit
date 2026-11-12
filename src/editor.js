@@ -99,9 +99,12 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
           if (
             records.some(
               (r) =>
-                r.target.closest?.('.callout') ||
+                r.target.closest?.('.callout, .cm-fold-indicator') ||
                 [...r.addedNodes, ...r.removedNodes].some(
-                  (n) => n.nodeType === 1 && (n.matches('.callout') || n.querySelector('.callout')),
+                  (n) =>
+                    n.nodeType === 1 &&
+                    (n.matches('.callout, .cm-fold-indicator') ||
+                      n.querySelector('.callout, .cm-fold-indicator')),
                 ),
             )
           )
@@ -262,6 +265,26 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
               if (!coords) continue;
               if (coords.bottom < scroller.top || coords.top > scroller.bottom) continue;
               const end = view.coordsAtPos(block.to);
+              // Headings keep a folding lane even before Obsidian renders the arrow.
+              let handleRight = columnLeft - (/^h[1-6]$/.test(block.type) ? 40 : gap) * scale;
+              const { node } = view.domAtPos(block.contentFrom);
+              const line = (node.nodeType === 1 ? node : node.parentElement)?.closest('.cm-line');
+              for (const arrow of line?.querySelectorAll(
+                '.cm-fold-indicator .collapse-indicator',
+              ) || []) {
+                const rect = arrow.getBoundingClientRect();
+                if (
+                  rect.width > 0 &&
+                  rect.height > 0 &&
+                  rect.left < columnLeft &&
+                  rect.bottom >= coords.top &&
+                  rect.top <= coords.bottom
+                )
+                  handleRight = Math.min(handleRight, rect.left - 12 * scale);
+              }
+              const available = (handleRight - Math.max(host.left, scroller.left)) / scale;
+              const handleWidth = available >= width ? width : 18;
+              if (available < handleWidth) continue;
               result.hitAreas.push({
                 from: block.from,
                 top: coords.top - 3,
@@ -270,8 +293,8 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
               result.items.push({
                 from: block.from,
                 type: block.type,
-                compact: width === 18,
-                left: (columnLeft - host.left) / scale - width - gap,
+                compact: handleWidth === 18,
+                left: (handleRight - host.left) / scale - handleWidth,
                 top:
                   (coords.top - host.top) / scale +
                   Math.max(0, ((coords.bottom - coords.top) / scale - 25) / 2),
