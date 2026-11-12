@@ -12,15 +12,23 @@
 
 ### 功能截图
 
-基于 0.0.1 源码的浏览器演示，展示编辑控件。
+基于当前源码的浏览器演示，截图以 2 倍像素导出。
 
-| 内容插入 | 块操作 |
-| --- | --- |
-| ![搜索并插入标题](screenshots/flow-edit-0.0.1-insert.png) | ![块类型转换、复制、移动和删除](screenshots/flow-edit-0.0.1-block-menu.png) |
+**内容插入**
 
-![选中文字后的格式工具栏，加粗状态已启用](screenshots/flow-edit-0.0.1-selection.png)
+<img src="screenshots/flow-edit-hd-insert.png" alt="搜索并插入内容块" width="360">
 
-![高亮块类型面板](screenshots/flow-edit-0.0.1-callout-types.png)
+**块操作**
+
+<img src="screenshots/flow-edit-hd-block-menu.png" alt="块类型转换、复制、移动和删除" width="360">
+
+**文字格式**
+
+![选中文字后的格式工具栏](screenshots/flow-edit-hd-selection.png)
+
+**高亮块类型**
+
+<img src="screenshots/flow-edit-hd-callout-types.png" alt="高亮块类型面板" width="440">
 
 ## 使用方法
 
