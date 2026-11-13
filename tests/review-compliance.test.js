@@ -28,10 +28,15 @@ test('review findings remain enforced by strict compiler and lint gates', async 
   ]) {
     assert.equal(lint.rules['@typescript-eslint/' + rule][0], 2, rule + ' must fail CI');
   }
-  const [probe] = await new ESLint({ cwd: root }).lintText(
-    'export function unsafeProbe(value: any) { return value.path; }',
-    { filePath: path.join(root, 'src/core.ts') },
-  );
+  // A real, unique file avoids reusing the project's cached core.ts type graph.
+  const probePath = path.join(root, 'src', `review-negative-probe-${process.pid}.ts`);
+  let probe;
+  try {
+    fs.writeFileSync(probePath, 'export function unsafeProbe(value: any) { return value.path; }');
+    [probe] = await new ESLint({ cwd: root }).lintFiles([probePath]);
+  } finally {
+    fs.rmSync(probePath, { force: true });
+  }
   assert.ok(
     probe.messages.some(
       (message) => message.ruleId === '@typescript-eslint/no-unsafe-member-access',
