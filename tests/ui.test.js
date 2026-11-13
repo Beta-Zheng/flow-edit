@@ -2,10 +2,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { JSDOM } = require('jsdom');
-const ui = require('../src/ui');
-const { applyReadingStyle } = require('../src/reading');
-const c = require('../src/core');
+const { JSDOM } = require('./helpers/dom.cjs');
+const ui = require('../.host-build/modules/ui');
+const { applyReadingStyle } = require('../.host-build/modules/reading');
+const c = require('../.host-build/modules/core');
 function host() {
   const dom = new JSDOM('<!doctype html><body></body>', { pretendToBeVisual: true });
   return { dom, doc: dom.window.document };

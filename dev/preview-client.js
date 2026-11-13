@@ -7,6 +7,7 @@ const core = require('../src/core');
 const ui = require('../src/ui');
 const doc = document;
 window.activeDocument = doc;
+window.createEl = (tag) => doc.createElement(tag);
 const paths = {
   type: 'M4 4h16M12 4v16M8 20h8',
   'heading-1': 'M4 5v14M14 5v14M4 12h10M18 8l2-2v13',
@@ -97,9 +98,10 @@ window.FlowObsidian = {
     }
   },
 };
-const FlowEdit = require('../src/plugin');
+const pluginModule = require('../src/plugin');
+const FlowEdit = pluginModule.default;
 const p = new FlowEdit();
-p.settings = FlowEdit.safeSettings();
+p.settings = pluginModule.safeSettings();
 p.editors = new Set();
 p.readers = new Set();
 p.modals = new Set();

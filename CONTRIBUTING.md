@@ -1,6 +1,6 @@
 # Contributing
 
-Flow Edit is a CommonJS JavaScript Obsidian plugin. TypeScript source is not a submission requirement; the TypeScript project supplies type information to the official Obsidian ESLint API rules. `checkJs` is disabled: this is not a claim of complete TypeScript type safety.
+Flow Edit uses strict TypeScript and ESM source imports. The build type-checks and compiles them to a standalone CommonJS `main.js`; Obsidian and CodeMirror stay host-provided.
 
 Use Node.js **22.14 or newer** and npm. No runtime Node.js or Electron dependency is included in the mobile-compatible plugin.
 
@@ -20,11 +20,13 @@ manifest.json           Plugin metadata used by Obsidian
 versions.json           Plugin version / minimum app version map
 styles.css              Plugin controls and explicit user formatting
 src/                    Runtime source
-  plugin.js             Plugin, settings, commands and editor transactions
-  editor.js             CodeMirror extensions and their resource cleanup
-  core.js               Markdown block and formatting transformations
-  ui.js                 Menus and toolbars, scoped to the owning document
-  reading.js            Source-range-based reading styles
+  plugin.ts             Plugin, settings, commands and editor transactions
+  editor.ts             CodeMirror extensions and their resource cleanup
+  core.ts               Markdown block and formatting transformations
+  images.ts             Image groups, resizing and persistent width ratios
+  dom.ts                Owning-window and event/error boundary helpers
+  ui.ts                 Menus and toolbars, scoped to the owning document
+  reading.ts            Source-range-based reading styles
 scripts/                Build, validation, versioning and optional host QA
 dev/                    Browser preview; never shipped in the plugin
 tests/                  Automated runtime and release regression tests
@@ -35,7 +37,8 @@ tests/                  Automated runtime and release regression tests
 
 ## Checks
 
-- `npm run lint` uses all base and type-aware `eslint-plugin-obsidianmd` rules, plus JavaScript correctness rules. Warnings fail the command. Static visual styles belong in CSS; measured positions may remain dynamic.
+- `npm run typecheck` runs `tsc --noEmit` with `strict: true`. `npm run build` also refuses to emit when typing fails.
+- `npm run lint` enforces official Obsidian rules, the five `no-unsafe-*` rules, ESM imports and no explicit `any` or TypeScript suppression comments. Warnings fail the command. Static visual styles belong in CSS; measured positions may remain dynamic.
 - `npm run validate` checks metadata, synchronized versions, the permitted runtime module graph and private App API access.
 - `npm test` builds the standalone entry point and tests editor transactions, UI, unload behavior, the public comment bridge and release isolation.
 - `npm run format` / `npm run format:check` maintain consistent source formatting.

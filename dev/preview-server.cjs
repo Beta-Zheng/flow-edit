@@ -29,9 +29,20 @@ function browserBundle() {
       }
     }
     let source = fs.readFileSync(file, 'utf8');
+    if (file.endsWith('.ts'))
+      source = require('typescript').transpileModule(source, {
+        compilerOptions: {
+          target: require('typescript').ScriptTarget.ES2022,
+          module: require('typescript').ModuleKind.CommonJS,
+        },
+      }).outputText;
     source = source.replace(/require\((['"])([^'"]+)\1\)/g, (match, quote, request) => {
       if (request === 'obsidian') return 'window.FlowObsidian';
-      const target = require.resolve(request, { paths: [path.dirname(file)] });
+      const typed = path.resolve(path.dirname(file), request + '.ts');
+      const target =
+        request.startsWith('.') && fs.existsSync(typed)
+          ? typed
+          : require.resolve(request, { paths: [path.dirname(file)] });
       return `load(${visit(target)})`;
     });
     modules[id] = `function(module,exports){\n${source}\n}`;
@@ -49,11 +60,11 @@ const themePath = path.join(projectRoot, '..', 'lumen-docs', 'theme.css');
 const readTheme = () => (fs.existsSync(themePath) ? fs.readFileSync(themePath, 'utf8') : '');
 const theme = readTheme();
 const standalone = page
-  .replace('<link rel="stylesheet" href="/theme.css">', '<style>' + theme + '</style>')
-  .replace('<link rel="stylesheet" href="/styles.css">', '<style>' + style + '</style>')
+  .replace(/<link[^>]*href="\/theme.css"[^>]*>/, () => '<style>' + theme + '</style>')
+  .replace(/<link[^>]*href="\/styles.css"[^>]*>/, () => '<style>' + style + '</style>')
   .replace(
     '<script src="/preview-bundle.js"></script>',
-    '<script>' + bundle.replace(/<\/script/gi, '<\\/script') + '</script>',
+    () => '<script>' + bundle.replace(/<\/script/gi, '<\\/script') + '</script>',
   );
 fs.writeFileSync(path.join(projectRoot, 'flow-edit-preview.html'), standalone);
 if (process.argv.includes('--build-only')) {

@@ -3,11 +3,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { JSDOM } = require('jsdom');
+const { JSDOM } = require('./helpers/dom.cjs');
 const { EditorState, StateField, Transaction } = require('@codemirror/state');
 const { EditorView } = require('@codemirror/view');
 const { history, undo, redo } = require('@codemirror/commands');
-const core = require('../src/core');
+const core = require('../.host-build/modules/core');
 
 function harness() {
   const dom = new JSDOM('<!doctype html><body></body>', { pretendToBeVisual: true });
@@ -40,7 +40,7 @@ function harness() {
       this.context = null;
     }
   }
-  const file = { path: '测试.md' },
+  const file = { path: '测试.md', extension: 'md' },
     stateField = StateField.define({ create: () => ({ editor, file }), update: (v) => v });
   const O = {
     Plugin,

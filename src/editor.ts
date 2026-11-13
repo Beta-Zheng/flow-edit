@@ -1,29 +1,67 @@
-'use strict';
-const { StateField, StateEffect } = require('@codemirror/state');
-const { EditorView, Decoration, ViewPlugin, showTooltip } = require('@codemirror/view');
-const core = require('./core');
-const ui = require('./ui');
-const { ImageLayouts, galleryTarget } = require('./images');
-const refresh = StateEffect.define();
+import {
+  StateField,
+  StateEffect,
+  type EditorState,
+  type Text,
+  type Range,
+} from '@codemirror/state';
+import { EditorView, Decoration, ViewPlugin, showTooltip } from '@codemirror/view';
+import * as core from './core';
+import * as ui from './ui';
+import { ImageLayouts, galleryTarget } from './images';
+import type { GalleryTarget } from './images';
+import type { DecorationSet, ViewUpdate } from '@codemirror/view';
+import type * as O from 'obsidian';
+import type FlowEdit from './plugin';
+import { windowFor, eventElement, errorMessage, type AppWindow } from './dom';
+interface HitArea {
+  from: number;
+  top: number;
+  bottom: number;
+}
+interface HandleItem {
+  from: number;
+  type: string;
+  compact: boolean;
+  left: number;
+  top: number;
+}
+interface Measurement {
+  file: O.TFile | null | undefined;
+  snapshot: Text;
+  items: HandleItem[];
+  hitAreas: HitArea[];
+}
+interface EditorImageCapture {
+  snapshot: string;
+  editor: O.Editor;
+  file: O.TFile;
+  target: GalleryTarget;
+}
+const refresh = StateEffect.define<null>();
 
-function editorExtension(plugin, { editorInfoField, setIcon }) {
-  function info(view) {
-    return view.state.field(editorInfoField, false);
+function editorExtension(
+  plugin: FlowEdit,
+  { editorInfoField, setIcon }: Pick<typeof O, 'editorInfoField' | 'setIcon'>,
+) {
+  function info(view: EditorView) {
+    const ctx = view.state.field(editorInfoField, false);
+    return ctx?.editor && ctx.file ? { editor: ctx.editor, file: ctx.file } : undefined;
   }
-  const parsed = new WeakMap();
-  function scan(doc) {
+  const parsed = new WeakMap<Text, core.Block[]>();
+  function scan(doc: Text): core.Block[] {
     if (!parsed.has(doc)) parsed.set(doc, core.blocks(doc.toString()));
-    return parsed.get(doc);
+    return parsed.get(doc) || [];
   }
-  const styles = StateField.define({
+  const styles = StateField.define<DecorationSet>({
     create: build,
     update(value, tr) {
       return tr.docChanged || tr.effects.some((e) => e.is(refresh)) ? build(tr.state) : value;
     },
     provide: (field) => EditorView.decorations.from(field),
   });
-  function build(state) {
-    const ranges = [];
+  function build(state: EditorState) {
+    const ranges: Range<Decoration>[] = [];
     for (const b of scan(state.doc)) {
       if (!b.style) continue;
       ranges.push(
@@ -43,7 +81,23 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
   // CodeMirror's flex layout and shifts the text and its wrapping width.
   const handles = ViewPlugin.fromClass(
     class {
-      constructor(view) {
+      view: EditorView;
+      buttons: Map<number, HTMLButtonElement>;
+      triggers: Map<HTMLElement, Record<string, string | null>>;
+      root: HTMLDivElement;
+      observer: MutationObserver;
+      dead = false;
+      pointerY?: number;
+      hoveredFrom?: number;
+      hitAreas: HitArea[] = [];
+      drawnDoc?: Text;
+      drawnFile?: O.TFile | null;
+      onScroll: () => void;
+      onPointerMove: (event: PointerEvent) => void;
+      onPointerLeave: () => void;
+      onCalloutAction: (event: MouseEvent | KeyboardEvent) => void;
+      onCalloutPointer: (event: PointerEvent) => void;
+      constructor(view: EditorView) {
         this.view = view;
         this.buttons = new Map();
         this.triggers = new Map();
@@ -68,8 +122,8 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
         view.dom.addEventListener('pointermove', this.onPointerMove);
         view.dom.addEventListener('pointerleave', this.onPointerLeave);
         this.onCalloutAction = (e) => {
-          if (e.type === 'keydown' && !['Enter', ' '].includes(e.key)) return;
-          const target = e.target?.closest?.('.flow-callout-type-trigger');
+          if ('key' in e && !['Enter', ' '].includes(e.key)) return;
+          const target = eventElement(e.target)?.closest<HTMLElement>('.flow-callout-type-trigger');
           if (!target || !view.dom.contains(target)) return;
           e.preventDefault();
           e.stopPropagation();
@@ -90,22 +144,24 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
         view.dom.addEventListener('click', this.onCalloutAction, true);
         view.dom.addEventListener('keydown', this.onCalloutAction, true);
         this.onCalloutPointer = (e) => {
-          if (e.button === 0 && e.target?.closest?.('.flow-callout-type-trigger')) {
+          if (
+            e.button === 0 &&
+            eventElement(e.target)?.closest<HTMLElement>('.flow-callout-type-trigger')
+          ) {
             e.preventDefault();
             e.stopPropagation();
           }
         };
         view.dom.addEventListener('pointerdown', this.onCalloutPointer, true);
-        this.observer = new view.dom.ownerDocument.defaultView.MutationObserver((records) => {
+        this.observer = new (windowFor(view.dom.ownerDocument).MutationObserver)((records) => {
           if (
             records.some(
               (r) =>
-                r.target.closest?.('.callout, .cm-fold-indicator') ||
+                eventElement(r.target)?.closest('.callout, .cm-fold-indicator') ||
                 [...r.addedNodes, ...r.removedNodes].some(
                   (n) =>
-                    n.nodeType === 1 &&
-                    (n.matches('.callout, .cm-fold-indicator') ||
-                      n.querySelector('.callout, .cm-fold-indicator')),
+                    eventElement(n)?.matches('.callout, .cm-fold-indicator') ||
+                    eventElement(n)?.querySelector('.callout, .cm-fold-indicator'),
                 ),
             )
           )
@@ -151,7 +207,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
         });
         return button;
       }
-      update(update) {
+      update(update: ViewUpdate) {
         if (
           update.docChanged ||
           update.viewportChanged ||
@@ -177,28 +233,25 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
         for (const [from, button] of this.buttons)
           button.classList.toggle('flow-handle-revealed', from === active);
       }
-      restoreTrigger(node, attrs) {
+      restoreTrigger(node: HTMLElement, attrs: Record<string, string | null>) {
         node.classList.remove('flow-callout-type-trigger');
         for (const [key, value] of Object.entries(attrs))
           if (value == null) node.removeAttribute(key);
           else node.setAttribute(key, value);
       }
       updateCalloutTriggers() {
-        const seen = new Set(),
+        const seen = new Set<HTMLElement>(),
           view = this.view,
           text = view.state.doc.toString();
-        for (const node of view.contentDOM.querySelectorAll(
+        for (const node of view.contentDOM.querySelectorAll<HTMLElement>(
           '.callout > .callout-title > .callout-icon',
         )) {
-          if (node.closest('.callout').parentElement?.closest('.callout')) continue;
-          if (/^flow-gallery-/.test(node.closest('.callout').dataset.callout || '')) continue;
+          const callout = node.closest<HTMLElement>('.callout');
+          if (!callout || callout.parentElement?.closest('.callout')) continue;
+          if (/^flow-gallery-/.test(callout.dataset.callout || '')) continue;
           let block;
           try {
-            block = core.blockAt(
-              text,
-              view.posAtDOM(node.closest('.callout')),
-              scan(view.state.doc),
-            );
+            block = core.blockAt(text, view.posAtDOM(callout), scan(view.state.doc));
           } catch {
             continue;
           }
@@ -235,10 +288,10 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
         if (this.dead) return;
         this.view.requestMeasure({
           key: this,
-          read: (view) => {
+          read: (view): Measurement => {
             const file = info(view)?.file,
-              document = view.state.doc;
-            const result = { file, document, items: [], hitAreas: [] };
+              snapshot = view.state.doc;
+            const result: Measurement = { file, snapshot, items: [], hitAreas: [] };
             if (!file || !plugin.settings.blockHandles) return result;
             const host = view.dom.getBoundingClientRect(),
               content = view.contentDOM.getBoundingClientRect(),
@@ -247,7 +300,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
             const columnLeft =
               content.left +
               (parseFloat(
-                view.dom.ownerDocument.defaultView.getComputedStyle(view.contentDOM).paddingLeft,
+                windowFor(view.dom.ownerDocument).getComputedStyle(view.contentDOM).paddingLeft,
               ) || 0) *
                 scale;
             const space = (columnLeft - Math.max(host.left, scroller.left)) / scale;
@@ -255,7 +308,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
               gap = space >= 52 ? 12 : 4;
             // Compact in a narrow margin. Never add padding to make room.
             if (space < width + gap) return result;
-            for (const block of scan(document)) {
+            for (const block of scan(snapshot)) {
               if (
                 block.protected ||
                 !view.visibleRanges.some(
@@ -270,7 +323,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
               // Headings keep a folding lane even before Obsidian renders the arrow.
               let handleRight = columnLeft - (/^h[1-6]$/.test(block.type) ? 40 : gap) * scale;
               const { node } = view.domAtPos(block.contentFrom);
-              const line = (node.nodeType === 1 ? node : node.parentElement)?.closest('.cm-line');
+              const line = (eventElement(node) || node.parentElement)?.closest('.cm-line');
               for (const arrow of line?.querySelectorAll(
                 '.cm-fold-indicator .collapse-indicator',
               ) || []) {
@@ -307,16 +360,17 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
           write: (result) => {
             if (
               this.dead ||
-              this.view.state.doc !== result.document ||
+              this.view.state.doc !== result.snapshot ||
               info(this.view)?.file !== result.file
             )
               return;
-            this.drawnDoc = result.document;
+            this.drawnDoc = result.snapshot;
             this.drawnFile = result.file;
             this.updateCalloutTriggers();
             this.hitAreas = result.hitAreas;
             this.hoveredFrom = this.hitAreas.find(
-              (a) => this.pointerY >= a.top && this.pointerY <= a.bottom,
+              (a) =>
+                this.pointerY !== undefined && this.pointerY >= a.top && this.pointerY <= a.bottom,
             )?.from;
             const kept = new Set();
             for (const item of result.items) {
@@ -329,20 +383,24 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
               kept.add(item.from);
               button.dataset.flowFrom = String(item.from);
               button.classList.toggle('flow-handle-compact', item.compact);
-              button.querySelector('.flow-block-type').textContent = /^h\d$/.test(item.type)
-                ? item.type.toUpperCase()
-                : {
-                    text: 'T',
-                    bullet: '•',
-                    ordered: '1.',
-                    task: '☑',
-                    code: '{}',
-                    quote: '❝',
-                    callout: '▣',
-                    table: '▦',
-                    math: '∑',
-                    divider: '—',
-                  }[item.type] || 'T';
+              const label = button.querySelector('.flow-block-type');
+              if (label)
+                label.textContent = /^h\d$/.test(item.type)
+                  ? item.type.toUpperCase()
+                  : (
+                      {
+                        text: 'T',
+                        bullet: '•',
+                        ordered: '1.',
+                        task: '☑',
+                        code: '{}',
+                        quote: '❝',
+                        callout: '▣',
+                        table: '▦',
+                        math: '∑',
+                        divider: '—',
+                      } as Record<string, string>
+                    )[item.type] || 'T';
               button.style.left = item.left + 'px';
               button.style.top = item.top + 'px';
             }
@@ -375,7 +433,8 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
   const attributes = EditorView.editorAttributes.of({ class: 'flow-editor' });
   const lifecycle = ViewPlugin.fromClass(
     class {
-      constructor(view) {
+      view: EditorView;
+      constructor(view: EditorView) {
         this.view = view;
         plugin.editors.add(view);
       }
@@ -384,7 +443,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
       }
     },
   );
-  const selectionGesture = StateEffect.define();
+  const selectionGesture = StateEffect.define<boolean>();
   const selecting = StateField.define({
     create: () => false,
     update(value, tr) {
@@ -394,13 +453,25 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
   });
   const selectionCompletion = ViewPlugin.fromClass(
     class {
-      constructor(view) {
+      view: EditorView;
+      mode: 'pointer' | 'keyboard' | null;
+      frame: number;
+      dead: boolean;
+      doc: Document;
+      win: AppWindow;
+      start: (mode: 'pointer' | 'keyboard') => void;
+      finish: () => void;
+      down: (event: MouseEvent) => void;
+      up: () => void;
+      keydown: (event: KeyboardEvent) => void;
+      keyup: () => void;
+      constructor(view: EditorView) {
         this.view = view;
         this.mode = null;
         this.frame = 0;
         this.dead = false;
         const doc = view.dom.ownerDocument,
-          win = doc.defaultView;
+          win = windowFor(doc);
         this.doc = doc;
         this.win = win;
         this.start = (mode) => {
@@ -423,8 +494,8 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
         this.down = (e) => {
           if (
             e.button !== 0 ||
-            !view.contentDOM.contains(e.target) ||
-            e.target.closest?.('.flow-callout-type-trigger')
+            !view.contentDOM.contains(eventElement(e.target)) ||
+            eventElement(e.target)?.closest('.flow-callout-type-trigger')
           )
             return;
           this.start('pointer');
@@ -432,19 +503,20 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
         this.up = () => {
           if (this.mode === 'pointer') this.finish();
         };
-        const selectionKey = (e) =>
+        const selectionKey = (e: KeyboardEvent) =>
           (e.shiftKey &&
             /^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End|PageUp|PageDown)$/.test(e.key)) ||
           ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a');
         this.keydown = (e) => {
-          if (view.contentDOM.contains(e.target) && selectionKey(e)) this.start('keyboard');
+          if (view.contentDOM.contains(eventElement(e.target)) && selectionKey(e))
+            this.start('keyboard');
         };
         this.keyup = () => {
           if (this.mode === 'keyboard') this.finish();
         };
-        for (const name of ['pointerdown', 'mousedown'])
+        for (const name of ['pointerdown', 'mousedown'] as const)
           doc.addEventListener(name, this.down, true);
-        for (const name of ['pointerup', 'mouseup', 'pointercancel', 'dragend'])
+        for (const name of ['pointerup', 'mouseup', 'pointercancel', 'dragend'] as const)
           doc.addEventListener(name, this.up, true);
         doc.addEventListener('keydown', this.keydown, true);
         doc.addEventListener('keyup', this.keyup, true);
@@ -453,7 +525,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
       destroy() {
         this.dead = true;
         if (this.frame) this.win.cancelAnimationFrame(this.frame);
-        for (const name of ['pointerdown', 'mousedown'])
+        for (const name of ['pointerdown', 'mousedown'] as const)
           this.doc.removeEventListener(name, this.down, true);
         for (const name of ['pointerup', 'mouseup', 'pointercancel', 'dragend'])
           this.doc.removeEventListener(name, this.up, true);
@@ -478,6 +550,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
     const b = core.blockAt(state.doc.toString(), s.from, scan(state.doc));
     if (b.protected || s.to > b.to || ['code', 'math', 'indented-code'].includes(b.type))
       return null;
+    const editor = ctx.editor;
     return {
       pos: s.from,
       end: s.to,
@@ -497,8 +570,8 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
               current.empty ||
               view.state.selection.ranges.length !== 1 ||
               currentInfo?.file !== file ||
-              currentInfo.editor !== ctx.editor ||
-              ctx.editor.getValue() !== text
+              currentInfo.editor !== editor ||
+              editor.getValue() !== text
             )
               return;
             const block = core.blockAt(text, current.from, scan(view.state.doc));
@@ -518,33 +591,20 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
                 boundary: view.scrollDOM,
               };
             if (id === 'type')
-              plugin.openBlockTypes(ctx.editor, file, current.from, anchor, view.dom.ownerDocument);
+              plugin.openBlockTypes(editor, file, current.from, anchor, view.dom.ownerDocument);
             else if (id === 'callout')
-              plugin.openCalloutTypes(
-                ctx.editor,
-                file,
-                current.from,
-                anchor,
-                view.dom.ownerDocument,
-              );
+              plugin.openCalloutTypes(editor, file, current.from, anchor, view.dom.ownerDocument);
             else if (id === 'color' || id === 'align')
-              plugin.openBlockStyle(
-                ctx.editor,
-                file,
-                current.from,
-                id,
-                anchor,
-                view.dom.ownerDocument,
-              );
+              plugin.openBlockStyle(editor, file, current.from, id, anchor, view.dom.ownerDocument);
             else if (['bullet', 'ordered', 'task', 'quote'].includes(id))
-              plugin.convertSelectedBlock(ctx.editor, file, current.from, id);
+              plugin.convertSelectedBlock(editor, file, current.from, id);
             else if (id === 'indent' || id === 'outdent')
-              plugin.indentSelectedBlock(ctx.editor, file, current.from, id === 'indent' ? 1 : -1);
+              plugin.indentSelectedBlock(editor, file, current.from, id === 'indent' ? 1 : -1);
             else if (id === 'comment')
-              plugin.commentSelection(ctx.editor, file, { from: current.from, to: current.to });
+              plugin.commentSelection(editor, file, { from: current.from, to: current.to });
             else
               plugin.inline(
-                ctx.editor,
+                editor,
                 file,
                 id,
                 { from: current.from, to: current.to },
@@ -555,6 +615,8 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
           [],
           { block: b, comment: !!plugin.commentProvider() },
         );
+        const tooltip = ui.el(view.dom.ownerDocument, 'div', 'flow-toolbar-tooltip');
+        tooltip.append(dom);
         function sync() {
           const text = view.state.doc.toString(),
             selected = view.state.selection.main,
@@ -574,13 +636,13 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
             block: core.blockAt(text, selected.from, scan(view.state.doc)),
           });
         }
-        let lastPoint;
+        let lastPoint: { left: number; right: number; top: number; bottom: number } | null = null;
         sync();
         return {
-          dom,
+          dom: tooltip,
           update: sync,
           resize: false,
-          getCoords(pos) {
+          getCoords(pos: number) {
             const bounds = ui.editorBounds(view.dom.ownerDocument, view.scrollDOM),
               host = view.dom.getBoundingClientRect();
             const scale = host.width / (view.dom.offsetWidth || host.width || 1) || 1;
@@ -593,7 +655,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
               Math.max(24, bounds.bottom - bounds.top - 16) / scale + 'px',
             );
             const point = view.coordsAtPos(pos) || lastPoint;
-            if (!point) return null;
+            if (!point) return view.dom.getBoundingClientRect();
             lastPoint = point;
             const width = dom.getBoundingClientRect().width;
             const left = Math.max(bounds.left + 8, Math.min(point.left, bounds.right - width - 8));
@@ -601,10 +663,10 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
           },
           positioned() {
             const bounds = ui.editorBounds(view.dom.ownerDocument, view.scrollDOM),
-              rect = dom.getBoundingClientRect();
+              rect = tooltip.getBoundingClientRect();
             if (rect.top < -5000) return;
-            const sx = rect.width / (dom.offsetWidth || rect.width || 1) || 1,
-              sy = rect.height / (dom.offsetHeight || rect.height || 1) || 1;
+            const sx = rect.width / (tooltip.offsetWidth || rect.width || 1) || 1,
+              sy = rect.height / (tooltip.offsetHeight || rect.height || 1) || 1;
             const left = Math.max(
               bounds.left + 8,
               Math.min(rect.left, bounds.right - rect.width - 8),
@@ -613,9 +675,11 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
             if (top < bounds.top + 8 && lastPoint) top = lastPoint.bottom + 6;
             top = Math.max(bounds.top + 8, Math.min(top, bounds.bottom - rect.height - 8));
             if (left !== rect.left)
-              dom.style.left = (parseFloat(dom.style.left) || 0) + (left - rect.left) / sx + 'px';
+              tooltip.style.left =
+                (parseFloat(tooltip.style.left) || 0) + (left - rect.left) / sx + 'px';
             if (top !== rect.top)
-              dom.style.top = (parseFloat(dom.style.top) || 0) + (top - rect.top) / sy + 'px';
+              tooltip.style.top =
+                (parseFloat(tooltip.style.top) || 0) + (top - rect.top) / sy + 'px';
           },
         };
       },
@@ -623,12 +687,14 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
   });
   const imageLayouts = ViewPlugin.fromClass(
     class {
-      constructor(view) {
+      controller: ImageLayouts<EditorImageCapture>;
+      constructor(view: EditorView) {
         this.controller = new ImageLayouts(
           view.contentDOM,
           (node) => {
             const ctx = info(view),
               snapshot = view.state.doc.toString();
+            if (!ctx?.editor || !ctx.file) throw new Error('请先打开 Markdown 笔记');
             const offset = view.posAtDOM(node);
             return {
               snapshot,
@@ -640,7 +706,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
           (captured, change) => {
             const ctx = info(view);
             if (
-              ctx.editor !== captured.editor ||
+              ctx?.editor !== captured.editor ||
               ctx.file !== captured.file ||
               view.state.doc.toString() !== captured.snapshot
             )
@@ -653,14 +719,21 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
             if (mapped)
               view.dispatch({
                 changes: { from: mapped.from, to: mapped.to, insert: mapped.insert },
-                selection: { anchor: mapped.selectFrom, head: mapped.selectTo },
+                selection: {
+                  anchor: mapped.selectFrom ?? selection.anchor,
+                  head: mapped.selectTo ?? selection.head,
+                },
                 userEvent: 'input.flow-image-resize',
               });
           },
-          (err) =>
-            plugin.perform(info(view)?.editor, info(view)?.file, () => {
-              throw err;
-            }),
+          (err) => {
+            const ctx = info(view);
+            if (ctx)
+              plugin.perform(ctx.editor, ctx.file, () => {
+                throw err;
+              });
+            else plugin.imageNotice(errorMessage(err));
+          },
           true,
         );
       }
@@ -683,4 +756,4 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
     imageLayouts,
   ];
 }
-module.exports = { editorExtension, refresh };
+export { editorExtension, refresh };

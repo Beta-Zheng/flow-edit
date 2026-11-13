@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": false,
+    "strict": true,
     "noEmit": true,
     "target": "ES2022",
     "module": "commonjs",
@@ -10,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["obsidian"]
   },
-  "include": ["src/**/*.js"]
+  "include": ["src/**/*.ts"]
 }

@@ -17,12 +17,14 @@ function validateTrackedFiles(files, read) {
     'styles.css',
     'package.json',
     'package-lock.json',
-    'src/plugin.js',
-    'src/core.js',
-    'src/images.js',
-    'src/editor.js',
-    'src/ui.js',
-    'src/reading.js',
+    'src/plugin.ts',
+    'src/core.ts',
+    'src/dom.ts',
+    'scripts/compile.cjs',
+    'src/images.ts',
+    'src/editor.ts',
+    'src/ui.ts',
+    'src/reading.ts',
     'scripts/build.cjs',
     'scripts/validate.cjs',
     '.github/workflows/check.yml',
@@ -37,7 +39,7 @@ function validateTrackedFiles(files, read) {
       ),
       'Private/generated file is tracked: ' + name,
     );
-    if (!/\.(?:[cm]?js|json|ya?ml|md|html|css)$/.test(name)) continue;
+    if (!/\.(?:[cm]?js|ts|json|ya?ml|md|html|css)$/.test(name)) continue;
     const text = read(name);
     assert.ok(
       !/gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(

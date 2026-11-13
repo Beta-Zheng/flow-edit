@@ -7,14 +7,15 @@
     "test": "node scripts/build.cjs && node --test",
     "lint": "eslint src scripts tests build.js eslint.config.mjs --max-warnings 0",
     "validate": "node scripts/validate.cjs",
-    "check": "npm run format:check && npm run lint && npm run validate && npm test",
+    "check": "npm run format:check && npm run typecheck && npm run lint && npm run validate && npm test",
     "preview": "node dev/preview-server.cjs",
     "preview:build": "node dev/preview-server.cjs --build-only",
     "release": "node scripts/build.cjs --release && node scripts/validate.cjs --release",
     "version": "node scripts/version-bump.cjs",
     "format": "prettier --write src scripts tests dev build.js eslint.config.mjs tsconfig.json package.json manifest.json versions.json .github .prettierrc.json",
     "format:check": "prettier --check src scripts tests dev build.js eslint.config.mjs tsconfig.json package.json manifest.json versions.json .github .prettierrc.json",
-    "release:preflight": "node scripts/release-preflight.cjs"
+    "release:preflight": "node scripts/release-preflight.cjs",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@codemirror/commands": "6.8.1",

@@ -1,5 +1,4 @@
-'use strict';
-const {
+import {
   ITEMS,
   searchItems,
   COLORS,
@@ -7,49 +6,118 @@ const {
   CALLOUT_TYPES,
   calloutInfo,
   canConvert,
-} = require('./core');
+} from './core';
+import type { Block, BlockStyle, InsertItem } from './core';
+import { windowFor, eventElement } from './dom';
+export type SetIcon = (element: HTMLElement, name: string) => void;
+export interface RectLike {
+  left: number;
+  bottom: number;
+  right?: number;
+  top?: number;
+  width?: number;
+  height?: number;
+}
+export interface Anchor extends RectLike {
+  boundary?: HTMLElement;
+  element?: HTMLElement;
+  fallback?: RectLike;
+}
+export interface PopupOptions {
+  doc: Document;
+  anchor: Anchor;
+  setIcon?: SetIcon;
+  onClose?: (reason: string) => void;
+  onPosition?: () => void;
+  label?: string;
+  returnFocus?: () => void;
+}
+interface ButtonOptions {
+  next?: boolean;
+  disabled?: boolean;
+  reason?: string;
+  active?: boolean;
+  danger?: boolean;
+}
+export type BlockActionArgs =
+  | ['style', Partial<BlockStyle>]
+  | ['move' | 'indent', number]
+  | ['convert' | 'below', string]
+  | ['cut' | 'copy' | 'duplicate' | 'delete' | 'block-link'];
+interface BlockMenuOptions extends PopupOptions {
+  block: Block;
+  act: (...args: BlockActionArgs) => unknown;
+  comment?: (() => unknown) | null;
+  types?: () => void;
+  callouts?: () => void;
+}
+interface TypeMenuOptions extends PopupOptions {
+  block: Block;
+  choose: (type: string) => unknown;
+}
+interface StyleMenuOptions extends PopupOptions {
+  block: Block;
+  mode: 'align' | 'color';
+  choose: (style: Partial<BlockStyle>) => unknown;
+}
+interface InsertMenuOptions extends PopupOptions {
+  choose: (type: string) => unknown;
+}
+export interface ToolbarContext {
+  block?: Block;
+  comment?: boolean;
+}
 
-function el(doc, tag, cls, text) {
-  const node = doc.createElement(tag);
+function el<K extends keyof HTMLElementTagNameMap>(
+  doc: Document,
+  tag: K,
+  cls?: string,
+  text?: string | null,
+): HTMLElementTagNameMap[K] {
+  const node = windowFor(doc).createEl(tag);
   if (cls) node.className = cls;
   if (text != null) node.textContent = text;
   return node;
 }
-function icon(doc, name, setIcon) {
+function icon(doc: Document, name: string, setIcon?: SetIcon) {
   const span = el(doc, 'span', 'flow-icon');
   if (setIcon) setIcon(span, name);
   else
     span.textContent =
-      {
-        type: 'T',
-        'heading-1': 'H₁',
-        'heading-2': 'H₂',
-        'heading-3': 'H₃',
-        list: '☷',
-        quote: '❝',
-        braces: '{}',
-        link: '↗',
-        minus: '—',
-      }[name] || '◇';
+      (
+        {
+          type: 'T',
+          'heading-1': 'H₁',
+          'heading-2': 'H₂',
+          'heading-3': 'H₃',
+          list: '☷',
+          quote: '❝',
+          braces: '{}',
+          link: '↗',
+          minus: '—',
+        } as Record<string, string>
+      )[name] || '◇';
   return span;
 }
-function itemRow(doc, item, setIcon) {
+function itemRow(doc: Document, item: InsertItem, setIcon?: SetIcon) {
   const row = el(doc, 'div', 'flow-suggestion');
   row.append(icon(doc, item.icon, setIcon), el(doc, 'span', 'flow-item-label', item.label));
-  const shortcut = {
-    h1: '#',
-    h2: '##',
-    h3: '###',
-    bullet: '-',
-    ordered: '1.',
-    task: '[]',
-    quote: '>',
-    code: '```',
-  }[item.id];
+  const shortcut = (
+    {
+      h1: '#',
+      h2: '##',
+      h3: '###',
+      bullet: '-',
+      ordered: '1.',
+      task: '[]',
+      quote: '>',
+      code: '```',
+    } as Record<string, string>
+  )[item.id];
   if (shortcut) row.append(el(doc, 'span', 'flow-shortcut', shortcut));
   return row;
 }
-const COLOR_NAMES = {
+const COLOR_NAMES: Record<string, string> = {
   default: '默认',
   none: '无',
   gray: '灰色',
@@ -60,9 +128,9 @@ const COLOR_NAMES = {
   blue: '蓝色',
   purple: '紫色',
 };
-const toolbarIconRenderers = new WeakMap();
-function editorBounds(doc, boundary) {
-  const win = doc.defaultView,
+const toolbarIconRenderers = new WeakMap<HTMLElement, SetIcon | undefined>();
+function editorBounds(doc: Document, boundary?: HTMLElement) {
+  const win = windowFor(doc),
     w = win.innerWidth,
     h = win.innerHeight,
     r = boundary?.getBoundingClientRect();
@@ -75,7 +143,7 @@ function editorBounds(doc, boundary) {
       }
     : { left: 0, right: w, top: 0, bottom: h };
 }
-function stableRect(r) {
+function stableRect(r?: RectLike | null) {
   if (!r || !Number.isFinite(r.left) || !Number.isFinite(r.bottom) || r.bottom < 0 || r.left < -1)
     return null;
   if ('width' in r && (!r.width || !r.height)) return null;
@@ -87,15 +155,23 @@ function stableRect(r) {
   };
 }
 
-function openPopup({ doc, anchor, setIcon, onClose, onPosition, label = '块操作', returnFocus }) {
+function openPopup({
+  doc,
+  anchor,
+  setIcon,
+  onClose,
+  onPosition,
+  label = '块操作',
+  returnFocus,
+}: PopupOptions) {
   const root = el(doc, 'div', 'flow-popup');
   root.setAttribute('role', 'menu');
   root.setAttribute('aria-label', label);
   doc.body.append(root);
   let closed = false,
-    closeReason = null,
+    closeReason: string | null = null,
     frame = 0;
-  const win = doc.defaultView;
+  const win = windowFor(doc);
   let lastAnchor = stableRect(anchor) || stableRect(anchor.fallback);
   const probe = el(doc, 'div', 'flow-coordinate-probe');
   probe.classList.add('flow-position-probe');
@@ -142,7 +218,7 @@ function openPopup({ doc, anchor, setIcon, onClose, onPosition, label = '块操�
   }
   const observer =
     win.ResizeObserver && anchor.boundary ? new win.ResizeObserver(schedulePosition) : null;
-  observer?.observe(anchor.boundary);
+  if (anchor.boundary) observer?.observe(anchor.boundary);
   function close(restore = false, reason = 'action') {
     if (closed) return;
     closed = true;
@@ -155,21 +231,21 @@ function openPopup({ doc, anchor, setIcon, onClose, onPosition, label = '块操�
     doc.removeEventListener('keydown', keydown, true);
     win.removeEventListener('resize', resized);
     doc.removeEventListener('scroll', scrolled, true);
-    onClose?.();
+    onClose?.(reason);
     if (restore) returnFocus?.();
   }
-  function outside(e) {
-    if (!root.contains(e.target)) close(false, 'outside');
+  function outside(e: MouseEvent) {
+    if (!root.contains(eventElement(e.target))) close(false, 'outside');
   }
-  function scrolled(e) {
-    if (root.contains(e.target)) return;
+  function scrolled(e: Event) {
+    if (root.contains(eventElement(e.target))) return;
     if (anchor.element?.isConnected) schedulePosition();
     else close(false, 'scroll');
   }
   function resized() {
     close(false, 'resize');
   }
-  function keydown(e) {
+  function keydown(e: KeyboardEvent) {
     if (e.isComposing) return;
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -182,11 +258,11 @@ function openPopup({ doc, anchor, setIcon, onClose, onPosition, label = '块操�
       return;
     }
     if (!root.contains(doc.activeElement)) return;
-    const buttons = [...root.querySelectorAll('button:not(:disabled)')];
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
     if (!buttons.length) return;
     e.preventDefault();
     e.stopPropagation();
-    const index = buttons.indexOf(doc.activeElement);
+    const index = buttons.findIndex((button) => button === doc.activeElement);
     const next =
       e.key === 'Home'
         ? 0
@@ -200,10 +276,16 @@ function openPopup({ doc, anchor, setIcon, onClose, onPosition, label = '块操�
   doc.addEventListener('scroll', scrolled, true);
   win.addEventListener('resize', resized);
   root.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button')) e.preventDefault();
+    if (eventElement(e.target)?.closest('button')) e.preventDefault();
   });
   if (anchor.element) schedulePosition();
-  function button(parent, label, name, action, options = {}) {
+  function button(
+    parent: HTMLElement,
+    label: string,
+    name: string,
+    action?: () => unknown,
+    options: ButtonOptions = {},
+  ) {
     const b = el(doc, 'button', 'flow-menu-item' + (options.danger ? ' flow-danger' : ''));
     b.type = 'button';
     b.setAttribute('role', 'menuitem');
@@ -232,10 +314,10 @@ function openPopup({ doc, anchor, setIcon, onClose, onPosition, label = '块操�
     button,
     position,
     focus() {
-      const selected = root.querySelector(
+      const selected = root.querySelector<HTMLElement>(
         '[aria-checked="true"]:not(:disabled), button[aria-current="true"]:not(:disabled)',
       );
-      (selected || root.querySelector('button:not(:disabled), input'))?.focus({
+      (selected || root.querySelector<HTMLElement>('button:not(:disabled), input'))?.focus({
         preventScroll: true,
       });
     },
@@ -247,11 +329,11 @@ function openPopup({ doc, anchor, setIcon, onClose, onPosition, label = '块操�
     },
   };
 }
-function blockMenu(options) {
+function blockMenu(options: BlockMenuOptions) {
   const { doc, block, act, comment } = options;
   const menu = openPopup(options),
     root = menu.root;
-  function head(title, back) {
+  function head(title: string, back = false) {
     root.replaceChildren();
     const h = el(doc, 'div', 'flow-menu-heading');
     if (back)
@@ -278,7 +360,7 @@ function blockMenu(options) {
     for (const [key, values, title] of [
       ['color', COLORS, '文字颜色'],
       ['background', BACKGROUNDS, '背景颜色'],
-    ]) {
+    ] as const) {
       const s = section();
       s.append(el(doc, 'div', 'flow-section-label', title));
       const grid = el(doc, 'div', 'flow-color-grid');
@@ -366,7 +448,7 @@ function blockMenu(options) {
   menu.focus();
   return menu;
 }
-function typeMenu(options) {
+function typeMenu(options: TypeMenuOptions) {
   const { doc, block, choose } = options,
     menu = openPopup({ ...options, label: '转换块类型' });
   menu.root.classList.add('flow-type-picker');
@@ -379,7 +461,7 @@ function typeMenu(options) {
     ['标题', ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']],
     ['列表', ['bullet', 'ordered', 'task']],
     ['内容块', ['quote', 'callout', 'code', 'table']],
-  ]) {
+  ] as const) {
     const section = el(doc, 'div', 'flow-type-section');
     section.dataset.flowTypeGroup = label;
     section.append(el(doc, 'div', 'flow-section-label', label));
@@ -388,6 +470,7 @@ function typeMenu(options) {
     section.append(list);
     for (const id of ids) {
       const item = ITEMS.find((x) => x.id === id);
+      if (!item) continue;
       const b = menu.button(list, item.label, item.icon, () => choose(item.id), {
         active: block.type === item.id,
         disabled: !canConvert(block, item.id),
@@ -402,7 +485,7 @@ function typeMenu(options) {
   menu.focus();
   return menu;
 }
-function calloutTypeMenu(options) {
+function calloutTypeMenu(options: TypeMenuOptions) {
   const { doc, block, choose } = options,
     menu = openPopup({ ...options, label: '高亮块类型' }),
     info = calloutInfo(block);
@@ -431,14 +514,14 @@ function calloutTypeMenu(options) {
       copy,
       icon(doc, active ? 'check' : 'minus', options.setIcon),
     );
-    b.lastElementChild.classList.add('flow-option-check');
-    b.lastElementChild.classList.toggle('flow-option-check-hidden', !active);
+    b.lastElementChild?.classList.add('flow-option-check');
+    b.lastElementChild?.classList.toggle('flow-option-check-hidden', !active);
   }
   menu.position();
   menu.focus();
   return menu;
 }
-function styleMenu(options) {
+function styleMenu(options: StyleMenuOptions) {
   const { doc, block, choose, mode } = options,
     menu = openPopup({ ...options, label: mode === 'align' ? '块对齐' : '块颜色' });
   menu.root.append(
@@ -458,7 +541,7 @@ function styleMenu(options) {
     for (const [key, values, label] of [
       ['color', COLORS, '文字颜色'],
       ['background', BACKGROUNDS, '背景颜色'],
-    ]) {
+    ] as const) {
       menu.root.append(el(doc, 'div', 'flow-section-label', label));
       const grid = el(doc, 'div', 'flow-color-grid');
       menu.root.append(grid);
@@ -477,7 +560,7 @@ function styleMenu(options) {
   menu.focus();
   return menu;
 }
-function insertMenu(options) {
+function insertMenu(options: InsertMenuOptions) {
   const { doc, setIcon, choose } = options;
   const menu = openPopup({ ...options, label: '插入内容' });
   const search = el(doc, 'input', 'flow-search');
@@ -518,28 +601,33 @@ function insertMenu(options) {
   search.focus({ preventScroll: true });
   return menu;
 }
-function updateToolbar(root, active = [], context) {
-  for (const b of root.querySelectorAll('button[data-flow-format]')) {
-    const pressed = active.includes(b.dataset.flowFormat);
+function updateToolbar(root: HTMLElement, active: string[] = [], context?: ToolbarContext) {
+  for (const b of root.querySelectorAll<HTMLButtonElement>('button[data-flow-format]')) {
+    const pressed = active.includes(b.dataset.flowFormat || '');
     b.classList.toggle('is-active', pressed);
     b.setAttribute('aria-pressed', String(pressed));
   }
-  if (context) {
+  if (context?.block) {
     const { block } = context,
       item = ITEMS.find((x) => x.id === block.type),
       info = calloutInfo(block),
-      type = root.querySelector('[data-flow-action="type"]'),
-      callout = root.querySelector('[data-flow-action="callout"]');
-    function updateSelect(button, label, name, prefix) {
+      type = root.querySelector<HTMLButtonElement>('[data-flow-action="type"]'),
+      callout = root.querySelector<HTMLButtonElement>('[data-flow-action="callout"]');
+    function updateSelect(
+      button: HTMLButtonElement | null,
+      label: string,
+      name: string,
+      prefix: string,
+    ) {
       if (!button) return;
       const text = button.querySelector('.flow-tool-label'),
         tag = button.querySelector('.flow-tool-prefix');
-      if (text.textContent !== label) text.textContent = label;
-      if (tag.textContent !== prefix) tag.textContent = prefix;
+      if (text && text.textContent !== label) text.textContent = label;
+      if (tag && tag.textContent !== prefix) tag.textContent = prefix;
       if (button.dataset.flowIcon !== name) {
         button
           .querySelector('.flow-icon')
-          .replaceWith(icon(root.ownerDocument, name, toolbarIconRenderers.get(root)));
+          ?.replaceWith(icon(root.ownerDocument, name, toolbarIconRenderers.get(root)));
         button.dataset.flowIcon = name;
       }
     }
@@ -552,22 +640,28 @@ function updateToolbar(root, active = [], context) {
     );
     if (type) type.title = '块类型：' + (item?.label || '内容块') + '（作用于整块）';
     if (callout) callout.title = info ? '标注类型：' + info.label : '将当前块转为高亮块';
-    for (const button of root.querySelectorAll('[data-flow-convert]')) {
+    for (const button of root.querySelectorAll<HTMLButtonElement>('[data-flow-convert]')) {
       const id = button.dataset.flowConvert;
-      button.disabled = !canConvert(block, id);
+      button.disabled = !canConvert(block, id || '');
       button.classList.toggle('is-active', block.type === id);
       button.setAttribute('aria-pressed', String(block.type === id));
     }
-    for (const button of root.querySelectorAll('[data-flow-indent]'))
+    for (const button of root.querySelectorAll<HTMLButtonElement>('[data-flow-indent]'))
       button.hidden = !['bullet', 'ordered', 'task'].includes(block.type);
   }
 }
-function createToolbar(doc, execute, setIcon, active = [], context) {
+function createToolbar(
+  doc: Document,
+  execute: (id: string, button: HTMLButtonElement) => unknown,
+  setIcon?: SetIcon,
+  active: string[] = [],
+  context?: ToolbarContext,
+) {
   const root = el(doc, 'div', 'flow-toolbar');
   root.setAttribute('role', 'toolbar');
   root.setAttribute('aria-label', '文字格式');
   toolbarIconRenderers.set(root, setIcon);
-  function group(items) {
+  function group(items: [string, string, string, string?][]) {
     const row = el(doc, 'div', 'flow-toolbar-group');
     root.append(row);
     for (const [id, label, name, text] of items) {
@@ -631,8 +725,8 @@ function createToolbar(doc, execute, setIcon, active = [], context) {
   if (context?.comment) group([['comment', '评论', 'message-square']]);
   root.addEventListener('keydown', (e) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-    const buttons = [...root.querySelectorAll('button:not(:disabled)')],
-      i = buttons.indexOf(doc.activeElement);
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')],
+      i = buttons.findIndex((button) => button === doc.activeElement);
     if (i < 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -647,7 +741,7 @@ function createToolbar(doc, execute, setIcon, active = [], context) {
   updateToolbar(root, active, context);
   return root;
 }
-module.exports = {
+export {
   el,
   icon,
   itemRow,
@@ -658,6 +752,6 @@ module.exports = {
   calloutTypeMenu,
   styleMenu,
   insertMenu,
-  toolbar: createToolbar,
+  createToolbar as toolbar,
   updateToolbar,
 };

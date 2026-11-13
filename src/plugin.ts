@@ -1,22 +1,51 @@
-'use strict';
-const O = require('obsidian');
-const core = require('./core');
-const ui = require('./ui');
-const images = require('./images');
-const { editorExtension, refresh } = require('./editor');
-const { readingSupport } = require('./reading');
-const DEFAULTS = { slashMenu: true, blockHandles: true, selectionToolbar: true };
-function offsetPos(text, offset) {
-  const lines = text.slice(0, Math.max(0, offset)).split('\n');
-  return { line: lines.length - 1, ch: lines.at(-1).length };
+import * as O from 'obsidian';
+import * as core from './core';
+import * as ui from './ui';
+import * as images from './images';
+import { editorExtension, refresh } from './editor';
+import { readingSupport } from './reading';
+import { errorMessage, windowFor } from './dom';
+import type { EditorView } from '@codemirror/view';
+type FileInput = O.TFile | null | undefined;
+interface Settings {
+  slashMenu: boolean;
+  blockHandles: boolean;
+  selectionToolbar: boolean;
 }
-function safeSettings(data) {
+interface LinkOptions {
+  image: boolean;
+  initial?: string;
+  submit: (markdown: string) => void;
+}
+interface Session {
+  snapshot: string;
+  editor: O.Editor;
+  file: O.TFile;
+  valid(): boolean;
+}
+interface Reader extends O.MarkdownRenderChild {
+  ctx: O.MarkdownPostProcessorContext;
+  repaint(): Promise<void>;
+}
+interface CommentProvider {
+  addComment(context: { editor: O.Editor; file: O.TFile; range: core.TextRange }): unknown;
+}
+const DEFAULTS = { slashMenu: true, blockHandles: true, selectionToolbar: true };
+function offsetPos(text: string, offset: number): O.EditorPosition {
+  const lines = text.slice(0, Math.max(0, offset)).split('\n');
+  return { line: lines.length - 1, ch: lines[lines.length - 1].length };
+}
+function safeSettings(data: unknown): Settings {
+  const source: Record<string, unknown> =
+    data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
   const out = { ...DEFAULTS };
-  for (const key of ['slashMenu', 'blockHandles', 'selectionToolbar'])
-    if (typeof data?.[key] === 'boolean') out[key] = data[key];
+  for (const key of ['slashMenu', 'blockHandles', 'selectionToolbar'] as const) {
+    const value = source[key];
+    if (typeof value === 'boolean') out[key] = value;
+  }
   return out;
 }
-function destination(value) {
+function destination(value: string) {
   const url = value.trim();
   if (
     !url ||
@@ -27,7 +56,9 @@ function destination(value) {
   return '<' + url + '>';
 }
 class LinkModal extends O.Modal {
-  constructor(plugin, options) {
+  plugin: FlowEdit;
+  options: LinkOptions;
+  constructor(plugin: FlowEdit, options: LinkOptions) {
     super(plugin.app);
     this.plugin = plugin;
     this.options = options;
@@ -69,7 +100,7 @@ class LinkModal extends O.Modal {
         submit(`${image ? '!' : ''}[${label}](${dest})`);
         this.close();
       } catch (err) {
-        error.textContent = err.message;
+        error.textContent = errorMessage(err);
       }
     });
     url.focus();
@@ -79,8 +110,11 @@ class LinkModal extends O.Modal {
     this.contentEl.replaceChildren();
   }
 }
-class SlashSuggest extends O.EditorSuggest {
-  constructor(plugin) {
+class SlashSuggest extends O.EditorSuggest<core.InsertItem> {
+  plugin: FlowEdit;
+  cache: WeakMap<O.Editor, { text: string; blocks: core.Block[] }>;
+  doc?: Document;
+  constructor(plugin: FlowEdit) {
     super(plugin.app);
     this.plugin = plugin;
     this.limit = 30;
@@ -91,7 +125,7 @@ class SlashSuggest extends O.EditorSuggest {
       { command: 'esc', purpose: '关闭' },
     ]);
   }
-  onTrigger(cursor, editor, file) {
+  onTrigger(cursor: O.EditorPosition, editor: O.Editor, file: O.TFile | null) {
     if (!this.plugin.settings.slashMenu || !file || editor.somethingSelected()) return null;
     const text = editor.getValue();
     let cached = this.cache.get(editor);
@@ -102,16 +136,16 @@ class SlashSuggest extends O.EditorSuggest {
     const ctx = core.slashContext(text, editor.posToOffset(cursor), cached.blocks);
     return ctx ? { start: editor.offsetToPos(ctx.from), end: cursor, query: ctx.query } : null;
   }
-  getSuggestions(ctx) {
+  getSuggestions(ctx: O.EditorSuggestContext) {
     return core.searchItems(ctx.query);
   }
-  renderSuggestion(item, el) {
+  renderSuggestion(item: core.InsertItem, el: HTMLElement) {
     this.doc = el.ownerDocument;
     el.classList.add('flow-slash-item');
     el.closest('.suggestion-container')?.classList.add('flow-slash');
     el.append(ui.itemRow(el.ownerDocument, item, O.setIcon));
   }
-  selectSuggestion(item) {
+  selectSuggestion(item: core.InsertItem) {
     const ctx = this.context;
     if (!ctx) return;
     const editor = ctx.editor,
@@ -128,7 +162,8 @@ class SlashSuggest extends O.EditorSuggest {
   }
 }
 class SettingsTab extends O.PluginSettingTab {
-  constructor(plugin) {
+  plugin: FlowEdit;
+  constructor(plugin: FlowEdit) {
     super(plugin.app, plugin);
     this.plugin = plugin;
   }
@@ -160,7 +195,7 @@ class SettingsTab extends O.PluginSettingTab {
         '浮动格式工具栏',
         '完成文字选择、松开鼠标或选择按键后显示，拖选过程中保持隐藏。',
       ],
-    ])
+    ] as const)
       new O.Setting(root)
         .setName(title)
         .setDesc(desc)
@@ -184,11 +219,22 @@ class SettingsTab extends O.PluginSettingTab {
   }
 }
 class FlowEdit extends O.Plugin {
-  imageNotice(message) {
+  settings: Settings = { ...DEFAULTS };
+  editors = new Set<EditorView>();
+  readers = new Set<Reader>();
+  modals = new Set<O.Modal>();
+  saveQueue: Promise<unknown> = Promise.resolve();
+  suggest?: SlashSuggest;
+  popup: ReturnType<typeof ui.openPopup> | null = null;
+  popupSession: Session | null = null;
+  popupTargetMarker: HTMLElement | null = null;
+  dead = false;
+  imageNotice(message: string) {
     new O.Notice(message);
   }
   async onload() {
-    this.settings = safeSettings(await this.loadData());
+    const loaded: unknown = await this.loadData();
+    this.settings = safeSettings(loaded);
     this.editors = new Set();
     this.readers = new Set();
     this.modals = new Set();
@@ -231,7 +277,12 @@ class FlowEdit extends O.Plugin {
     );
     this.registerEvent(
       this.app.workspace.on('active-leaf-change', (leaf) => {
-        if (leaf && (!this.popupSession || leaf.view?.editor !== this.popupSession.editor))
+        if (
+          leaf &&
+          (!this.popupSession ||
+            !('editor' in leaf.view) ||
+            leaf.view.editor !== this.popupSession.editor)
+        )
           this.closePopup('leaf-change');
       }),
     );
@@ -291,7 +342,7 @@ class FlowEdit extends O.Plugin {
     this.popupTargetMarker?.remove();
     this.popupTargetMarker = null;
   }
-  markPopupTarget(editor, block) {
+  markPopupTarget(editor: O.Editor, block: core.Block) {
     const view = this.editorView(editor);
     if (!view) return;
     const host = view.dom.getBoundingClientRect(),
@@ -306,7 +357,7 @@ class FlowEdit extends O.Plugin {
       end = view.coordsAtPos(block.to);
     const inset =
       (parseFloat(
-        view.dom.ownerDocument.defaultView.getComputedStyle(view.contentDOM).paddingLeft,
+        windowFor(view.dom.ownerDocument).getComputedStyle(view.contentDOM).paddingLeft,
       ) || 0) * scale;
     const rect = native || {
       left: content.left + inset,
@@ -331,7 +382,7 @@ class FlowEdit extends O.Plugin {
     this.popup = null;
     this.popupSession = null;
   }
-  async updateSetting(key, value) {
+  async updateSetting(key: keyof Settings, value: boolean) {
     this.settings[key] = value;
     this.settings = safeSettings(this.settings);
     this.closePopup();
@@ -347,7 +398,7 @@ class FlowEdit extends O.Plugin {
       console.error('Flow Edit:', e);
     }
   }
-  openImageLayout(editor, file) {
+  openImageLayout(editor: O.Editor, file: FileInput) {
     this.perform(editor, file, () => {
       const s = this.session(editor, file);
       const target = images.galleryTarget(
@@ -359,7 +410,7 @@ class FlowEdit extends O.Plugin {
       const doc = this.documentFor(editor);
       const menu = ui.openPopup({
         doc,
-        anchor: editor.cursorCoords(true, 'window'),
+        anchor: this.anchor(editor, doc),
         setIcon: O.setIcon,
         label: '图片布局',
         returnFocus: () => editor.focus(),
@@ -401,7 +452,7 @@ class FlowEdit extends O.Plugin {
       menu.focus();
     });
   }
-  session(editor, file) {
+  session(editor: O.Editor, file: FileInput): Session {
     if (!file) throw new Error('请先打开 Markdown 笔记');
     const snapshot = editor.getValue(),
       path = file.path;
@@ -415,25 +466,30 @@ class FlowEdit extends O.Plugin {
           !this.dead &&
           file.path === path &&
           editor.getValue() === snapshot &&
-          leaves.some((l) => l.view.editor === editor && l.view.file === file)
+          leaves.some(
+            (l) =>
+              'editor' in l.view &&
+              l.view.editor === editor &&
+              'file' in l.view &&
+              l.view.file === file,
+          )
         );
       },
     };
   }
-  perform(editor, file, action) {
+  perform(editor: O.Editor, file: FileInput, action: () => unknown) {
     if (!file) return;
     try {
-      const result = action();
-      if (result?.catch)
-        result.catch((e) => {
-          console.error('Flow Edit:', e);
-          new O.Notice(e.message || '操作失败');
-        });
+      const result: unknown = action();
+      void Promise.resolve(result).catch((e: unknown) => {
+        console.error('Flow Edit:', e);
+        new O.Notice(errorMessage(e));
+      });
     } catch (e) {
-      new O.Notice(e.message || '操作失败');
+      new O.Notice(errorMessage(e));
     }
   }
-  change(editor, change) {
+  change(editor: O.Editor, change: core.Change | null) {
     if (!change) return;
     const old = editor.getValue(),
       next = old.slice(0, change.from) + change.insert + old.slice(change.to);
@@ -450,15 +506,15 @@ class FlowEdit extends O.Plugin {
     });
     editor.focus();
   }
-  editorView(editor) {
+  editorView(editor: O.Editor) {
     return [...this.editors].find(
       (v) => v.state.field(O.editorInfoField, false)?.editor === editor,
     );
   }
-  documentFor(editor) {
+  documentFor(editor: O.Editor): Document {
     return this.editorView(editor)?.dom.ownerDocument || activeDocument;
   }
-  anchor(editor, doc) {
+  anchor(editor: O.Editor, doc: Document): ui.Anchor {
     const view = this.editorView(editor),
       c = view?.coordsAtPos(editor.posToOffset(editor.getCursor()));
     if (c) return { left: c.left, bottom: c.bottom, top: c.top, right: c.right };
@@ -466,7 +522,7 @@ class FlowEdit extends O.Plugin {
     const rect = (view?.dom || doc.body).getBoundingClientRect();
     return { left: Math.max(12, rect.left + 24), bottom: Math.max(12, rect.top + 24) };
   }
-  openInsert(editor, file, anchor, doc) {
+  openInsert(editor: O.Editor, file: FileInput, anchor?: ui.Anchor, doc?: Document) {
     this.perform(editor, file, () => {
       doc ||= this.documentFor(editor);
       this.closePopup();
@@ -485,40 +541,44 @@ class FlowEdit extends O.Plugin {
       });
     });
   }
-  insert(editor, file, id, range, doc) {
+  insert(editor: O.Editor, file: FileInput, id: string, range?: core.TextRange, doc?: Document) {
     this.perform(editor, file, () => {
       doc ||= this.documentFor(editor);
       const s = this.session(editor, file),
         source = s.snapshot;
+      const selected = range || {
+        from: editor.posToOffset(editor.getCursor('from')),
+        to: editor.posToOffset(editor.getCursor('to')),
+      };
       if (id === 'link' || id === 'image') {
         new LinkModal(this, {
           image: id === 'image',
-          initial: /^\//.test(source.slice(range.from, range.to))
+          initial: /^\//.test(source.slice(selected.from, selected.to))
             ? ''
-            : source.slice(range.from, range.to),
+            : source.slice(selected.from, selected.to),
           submit: (insert) => {
             if (!s.valid()) throw new Error('文档已更改，请重新插入');
-            this.change(editor, { ...range, insert });
+            this.change(editor, { ...selected, insert });
           },
         }).open();
         return;
       }
-      const token = source.slice(range.from, range.to),
-        before = source.slice(0, range.from).split('\n').at(-1),
-        after = source.slice(range.to).split('\n')[0];
+      const token = source.slice(selected.from, selected.to),
+        before = source.slice(0, selected.from).split('\n').at(-1) || '',
+        after = source.slice(selected.to).split('\n')[0];
       const content = token.startsWith('/') ? '' : token;
       const result = core.convert(content, id);
       const prefix = before.trim() ? '\n\n' : '',
         suffix = after.trim() ? '\n\n' : '';
       const place = ['code', 'math'].includes(id) ? result.indexOf('\n') + 1 : result.length;
       this.change(editor, {
-        ...range,
+        ...selected,
         insert: prefix + result + suffix,
-        cursor: range.from + prefix.length + place,
+        cursor: selected.from + prefix.length + place,
       });
     });
   }
-  inline(editor, file, id, range) {
+  inline(editor: O.Editor, file: FileInput, id: string, range: core.TextRange, doc?: Document) {
     this.perform(editor, file, () => {
       if (id === 'link') {
         this.insert(editor, file, id, range);
@@ -530,7 +590,13 @@ class FlowEdit extends O.Plugin {
       if (mark) this.change(editor, core.wrapInline(editor.getValue(), range.from, range.to, mark));
     });
   }
-  menuContext(editor, file, offset, anchor, doc) {
+  menuContext(
+    editor: O.Editor,
+    file: FileInput,
+    offset: number,
+    anchor?: ui.Anchor,
+    doc?: Document,
+  ) {
     doc ||= this.documentFor(editor);
     this.closePopup();
     const s = this.session(editor, file),
@@ -563,14 +629,25 @@ class FlowEdit extends O.Plugin {
       setIcon: O.setIcon,
     };
   }
-  applyMenuChange(editor, file, ctx, change) {
+  applyMenuChange(
+    editor: O.Editor,
+    file: FileInput,
+    ctx: ReturnType<FlowEdit['menuContext']>,
+    change: core.Change | null,
+  ) {
     this.perform(editor, file, () => {
       if (!ctx.s.valid()) throw new Error('文档已更改，请重新打开类型面板');
       this.change(editor, core.retainSelection(change, ctx.s.snapshot, ctx.range));
       editor.focus();
     });
   }
-  openBlockTypes(editor, file, offset, anchor, doc) {
+  openBlockTypes(
+    editor: O.Editor,
+    file: FileInput,
+    offset: number,
+    anchor?: ui.Anchor,
+    doc?: Document,
+  ) {
     this.perform(editor, file, () => {
       const ctx = this.menuContext(editor, file, offset, anchor, doc);
       this.popup = ui.typeMenu({
@@ -589,7 +666,13 @@ class FlowEdit extends O.Plugin {
       });
     });
   }
-  openCalloutTypes(editor, file, offset, anchor, doc) {
+  openCalloutTypes(
+    editor: O.Editor,
+    file: FileInput,
+    offset: number,
+    anchor?: ui.Anchor,
+    doc?: Document,
+  ) {
     this.perform(editor, file, () => {
       const ctx = this.menuContext(editor, file, offset, anchor, doc);
       if (!core.canConvert(ctx.block, 'callout')) throw new Error('此复杂块请在源码中转换');
@@ -602,6 +685,7 @@ class FlowEdit extends O.Plugin {
             if (ctx.block.type === 'callout') change = core.setCalloutType(ctx.block, type);
             else {
               change = core.convertBlock(ctx.block, 'callout');
+              if (!change) return;
               const created = core.blocks(change.insert)[0],
                 header = core.setCalloutType(created, type);
               if (header)
@@ -615,7 +699,14 @@ class FlowEdit extends O.Plugin {
       });
     });
   }
-  openBlockStyle(editor, file, offset, mode, anchor, doc) {
+  openBlockStyle(
+    editor: O.Editor,
+    file: FileInput,
+    offset: number,
+    mode: 'color' | 'align',
+    anchor?: ui.Anchor,
+    doc?: Document,
+  ) {
     this.perform(editor, file, () => {
       const ctx = this.menuContext(editor, file, offset, anchor, doc);
       this.popup = ui.styleMenu({
@@ -633,13 +724,13 @@ class FlowEdit extends O.Plugin {
       });
     });
   }
-  convertSelectedBlock(editor, file, offset, type) {
+  convertSelectedBlock(editor: O.Editor, file: FileInput, offset: number, type: string) {
     this.perform(editor, file, () => {
       const ctx = this.menuContext(editor, file, offset);
       this.applyMenuChange(editor, file, ctx, core.convertBlock(ctx.block, type));
     });
   }
-  indentSelectedBlock(editor, file, offset, direction) {
+  indentSelectedBlock(editor: O.Editor, file: FileInput, offset: number, direction: number) {
     this.perform(editor, file, () => {
       const ctx = this.menuContext(editor, file, offset);
       if (!['bullet', 'ordered', 'task'].includes(ctx.block.type)) return;
@@ -655,27 +746,34 @@ class FlowEdit extends O.Plugin {
     });
   }
   commentProvider() {
-    const request = { provider: null };
+    const request: { provider: unknown } = { provider: null };
     this.app.workspace.trigger('flow-edit:resolve-comment-provider', request);
-    return typeof request.provider?.addComment === 'function' ? request.provider : null;
+    const provider = request.provider;
+    return provider &&
+      typeof provider === 'object' &&
+      'addComment' in provider &&
+      typeof provider.addComment === 'function'
+      ? (provider as CommentProvider)
+      : null;
   }
-  commentSelection(editor, file, range) {
+  commentSelection(editor: O.Editor, file: FileInput, range: core.TextRange) {
     this.perform(editor, file, () => {
       const provider = this.commentProvider();
-      if (!provider) return;
+      if (!provider || !file) return;
       editor.setSelection(editor.offsetToPos(range.from), editor.offsetToPos(range.to));
       return provider.addComment({ editor, file, range });
     });
   }
-  openBlock(editor, file, offset, anchor, doc) {
+  openBlock(editor: O.Editor, file: FileInput, offset: number, anchor?: ui.Anchor, doc?: Document) {
     this.perform(editor, file, () => {
       doc ||= this.documentFor(editor);
+      const currentDoc = doc;
       this.closePopup();
       const s = this.session(editor, file),
         b = core.blockAt(s.snapshot, offset);
       this.popupSession = s;
       if (b.protected) throw new Error('文档属性和 HTML 区块请直接编辑源码');
-      const act = (action, value) =>
+      const act = (...[action, value]: ui.BlockActionArgs) =>
         this.perform(editor, file, async () => {
           if (!s.valid()) throw new Error('文档已更改，请重新打开块菜单');
           if (action === 'convert') this.change(editor, core.convertBlock(b, value));
@@ -705,7 +803,9 @@ class FlowEdit extends O.Plugin {
             });
           }
           if (action === 'copy' || action === 'cut') {
-            await doc.defaultView.navigator.clipboard.writeText(s.snapshot.slice(b.from, b.to));
+            await windowFor(currentDoc).navigator.clipboard.writeText(
+              s.snapshot.slice(b.from, b.to),
+            );
             if (action === 'cut') {
               if (!s.valid()) throw new Error('内容已复制，但文档已更改，未剪切');
               this.change(editor, core.deleteBlock(s.snapshot, b));
@@ -728,9 +828,10 @@ class FlowEdit extends O.Plugin {
           if (action === 'block-link') {
             if (!b.text.trim()) throw new Error('请先在正文块中输入内容');
             const match = /(?: |\n)\^([\w-]+)\s*$/.exec(b.text);
-            const id = match?.[1] || 'flow-' + doc.defaultView.crypto.randomUUID().slice(0, 8);
-            await doc.defaultView.navigator.clipboard.writeText(
-              `[[${file.path.replace(/\.md$/, '')}#^${id}]]`,
+            const id =
+              match?.[1] || 'flow-' + windowFor(currentDoc).crypto.randomUUID().slice(0, 8);
+            await windowFor(currentDoc).navigator.clipboard.writeText(
+              `[[${s.file.path.replace(/\.md$/, '')}#^${id}]]`,
             );
             if (!match) {
               if (!s.valid()) throw new Error('文档已更改，请重新复制块链接');
@@ -778,7 +879,5 @@ class FlowEdit extends O.Plugin {
     this.modals.clear();
   }
 }
-module.exports = FlowEdit;
-module.exports.safeSettings = safeSettings;
-module.exports.offsetPos = offsetPos;
-module.exports.destination = destination;
+export default FlowEdit;
+export { safeSettings, offsetPos, destination };

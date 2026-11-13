@@ -1,5 +1,37 @@
-'use strict';
-
+export interface BlockStyle {
+  align: string;
+  color: string;
+  background: string;
+}
+export interface Block {
+  from: number;
+  to: number;
+  contentFrom: number;
+  startLine: number;
+  contentLine: number;
+  endLine: number;
+  type: string;
+  text: string;
+  protected: boolean;
+  style: BlockStyle | null;
+}
+export interface TextRange {
+  from: number;
+  to: number;
+}
+export interface Change extends TextRange {
+  insert: string;
+  cursor?: number;
+  selectFrom?: number;
+  selectTo?: number;
+}
+export interface InsertItem {
+  id: string;
+  label: string;
+  keywords: string;
+  icon: string;
+  group: string;
+}
 const COLORS = ['default', 'gray', 'red', 'orange', 'green', 'blue', 'purple'];
 const BACKGROUNDS = ['none', 'gray', 'red', 'yellow', 'green', 'blue', 'purple'];
 const ALIGNS = ['left', 'center', 'right'];
@@ -15,11 +47,11 @@ const CALLOUT_TYPES = [
   ['example', '示例', 'flask-conical', '案例与演示', 'purple'],
   ['quote', '引用', 'quote', '引述内容', 'gray'],
 ].map(([id, label, icon, description, color]) => ({ id, label, icon, description, color }));
-function calloutInfo(block) {
+function calloutInfo(block: Block) {
   if (block.type !== 'callout') return null;
   const m = /^(\s*>\s*\[!)([^\]\s|]+)(\|[^\]]*)?\]([+-]?)([^\n]*)/.exec(block.text);
   if (!m) return null;
-  const aliases = {
+  const aliases: Record<string, string> = {
     abstract: 'note',
     summary: 'note',
     tldr: 'note',
@@ -51,14 +83,14 @@ function calloutInfo(block) {
     headerLength: m[0].length,
   };
 }
-function setCalloutType(block, type) {
+function setCalloutType(block: Block, type: string): Change | null {
   if (!CALLOUT_TYPES.some((x) => x.id === type)) throw new Error('无效的高亮块类型');
   const info = calloutInfo(block);
   if (!info) throw new Error('请先选择高亮块');
   if (info.type === type) return null;
   return { from: info.from, to: info.to, insert: type };
 }
-function canConvert(block, type) {
+function canConvert(block: Block, type: string) {
   if (block.protected) return false;
   if (type === block.type) return true;
   if (['code', 'math', 'table', 'indented-code'].includes(block.type)) return false;
@@ -70,7 +102,7 @@ function canConvert(block, type) {
   return true;
 }
 // Trim unchanged edges so prefix/header changes keep the selected body text.
-function retainSelection(change, text, range) {
+function retainSelection(change: Change | null, text: string, range?: TextRange): Change | null {
   if (!change) return null;
   const old = text.slice(change.from, change.to);
   let start = 0,
@@ -88,7 +120,8 @@ function retainSelection(change, text, range) {
     insert = change.insert.slice(start, change.insert.length - end);
   if (from === to && !insert) return null;
   const delta = insert.length - (to - from),
-    map = (p) => (p < from ? p : p >= to ? p + delta : from + Math.min(p - from, insert.length));
+    map = (p: number) =>
+      p < from ? p : p >= to ? p + delta : from + Math.min(p - from, insert.length);
   return {
     from,
     to,
@@ -117,24 +150,24 @@ const ITEMS = [
   ['h6', '六级标题', 'heading h6', 'heading-6', '更多标题'],
 ].map(([id, label, keywords, icon, group]) => ({ id, label, keywords, icon, group }));
 
-function searchItems(query) {
+function searchItems(query: string) {
   const q = query.trim().toLowerCase();
   return ITEMS.filter((x) => `${x.label} ${x.id} ${x.keywords}`.toLowerCase().includes(q));
 }
-function parseStyle(line) {
+function parseStyle(line: string): BlockStyle | null {
   const match =
     /^<!-- flow-edit align=(left|center|right) color=(default|gray|red|orange|green|blue|purple) background=(none|gray|red|yellow|green|blue|purple) -->$/.exec(
       line.trim(),
     );
   return match ? { align: match[1], color: match[2], background: match[3] } : null;
 }
-function styleLine(style) {
+function styleLine(style: Partial<BlockStyle>) {
   const s = { align: 'left', color: 'default', background: 'none', ...style };
   if (!ALIGNS.includes(s.align) || !COLORS.includes(s.color) || !BACKGROUNDS.includes(s.background))
     throw new Error('无效的块样式');
   return `<!-- flow-edit align=${s.align} color=${s.color} background=${s.background} -->`;
 }
-function linesOf(text) {
+function linesOf(text: string) {
   let offset = 0;
   return text.split('\n').map((text, n) => {
     const line = { text, from: offset, to: offset + text.length, n };
@@ -142,8 +175,8 @@ function linesOf(text) {
     return line;
   });
 }
-function kind(line) {
-  if (/^ {0,3}#{1,6}\s/.test(line)) return 'h' + line.trimStart().match(/^#+/)[0].length;
+function kind(line: string) {
+  if (/^ {0,3}#{1,6}\s/.test(line)) return 'h' + (line.trimStart().match(/^#+/)?.[0].length || 1);
   if (/^\s*[-+*]\s+\[[ xX]\]\s/.test(line)) return 'task';
   if (/^\s*[-+*]\s+/.test(line)) return 'bullet';
   if (/^\s*\d+[.)]\s+/.test(line)) return 'ordered';
@@ -155,7 +188,7 @@ function kind(line) {
   return 'text';
 }
 // Top-level Markdown blocks. Nested lists / quotes / tables stay intact as one block.
-function blocks(text) {
+function blocks(text: string): Block[] {
   const lines = linesOf(text),
     out = [];
   for (let i = 0; i < lines.length;) {
@@ -229,7 +262,7 @@ function blocks(text) {
   }
   return out;
 }
-function blockAt(text, pos, parsed = blocks(text)) {
+function blockAt(text: string, pos: number, parsed = blocks(text)): Block {
   return (
     parsed.find((b) => pos >= b.from && pos <= b.to) || {
       from: pos,
@@ -238,22 +271,26 @@ function blockAt(text, pos, parsed = blocks(text)) {
       type: 'text',
       text: '',
       protected: false,
+      style: null,
+      startLine: text.slice(0, pos).split('\n').length - 1,
+      contentLine: text.slice(0, pos).split('\n').length - 1,
+      endLine: text.slice(0, pos).split('\n').length - 1,
     }
   );
 }
-function stripPrefix(line) {
+function stripPrefix(line: string) {
   return line.replace(/^(\s*)(?:#{1,6}\s+|[-+*]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?)/, '$1');
 }
-function convert(text, type) {
+function convert(text: string, type: string): string {
   const plain = text.split('\n').map(stripPrefix);
   if (/^h[1-6]$/.test(type))
     return plain.map((x) => '#'.repeat(Number(type[1])) + ' ' + x.trimStart()).join('\n');
   if (type === 'text') return plain.join('\n');
   if (['bullet', 'ordered', 'task'].includes(type)) {
-    const counts = new Map();
+    const counts = new Map<string, number>();
     return plain
       .map((x) => {
-        const indent = x.match(/^\s*/)[0],
+        const indent = x.match(/^\s*/)?.[0] || '',
           n = (counts.get(indent) || 0) + 1;
         counts.set(indent, n);
         return (
@@ -281,7 +318,7 @@ function convert(text, type) {
     );
   return text;
 }
-function setBlockStyle(document, block, patch) {
+function setBlockStyle(document: string, block: Block, patch: Partial<BlockStyle>): Change {
   if (block.protected || block.from === block.to) throw new Error('请先在正文块中输入内容');
   const style = { align: 'left', color: 'default', background: 'none', ...block.style, ...patch };
   const marker =
@@ -290,7 +327,7 @@ function setBlockStyle(document, block, patch) {
       : styleLine(style) + '\n';
   return { from: block.from, to: block.contentFrom, insert: marker };
 }
-function convertBlock(block, type) {
+function convertBlock(block: Block, type: string): Change | null {
   if (!canConvert(block, type)) throw new Error('复杂块请直接编辑源码，避免格式转换损坏内容');
   if (block.type === type) return null;
   let text = block.text;
@@ -303,7 +340,7 @@ function convertBlock(block, type) {
   }
   return { from: block.contentFrom, to: block.to, insert: convert(text, type) };
 }
-function deleteBlock(document, block) {
+function deleteBlock(document: string, block: Block): Change {
   // Consume one adjacent blank separator, keeping surrounding blocks separate.
   let from = block.from,
     to = block.to;
@@ -312,7 +349,7 @@ function deleteBlock(document, block) {
   else if (from > 0 && document.slice(from - 2, from) === '\n\n') from -= 2;
   return { from, to, insert: '' };
 }
-function moveBlock(document, block, direction) {
+function moveBlock(document: string, block: Block, direction: number): Change | null {
   const all = blocks(document),
     index = all.findIndex((x) => x.from === block.from);
   const other = all[index + direction];
@@ -326,7 +363,7 @@ function moveBlock(document, block, direction) {
     cursor: direction < 0 ? a.from : a.from + (b.to - b.from) + (b.from - a.to),
   };
 }
-function slashContext(text, offset, parsed) {
+function slashContext(text: string, offset: number, parsed?: Block[]) {
   const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
   const before = text.slice(lineStart, offset),
     match = /^(\s*)\/([^/\n]*)$/.exec(before);
@@ -335,10 +372,10 @@ function slashContext(text, offset, parsed) {
   if (b.protected || ['code', 'math', 'indented-code'].includes(b.type)) return null;
   return { from: lineStart + match[1].length, to: offset, query: match[2] };
 }
-function wrapInline(text, from, to, mark) {
+function wrapInline(text: string, from: number, to: number, mark: string): Change {
   if (from === to) return { from, to, insert: mark + mark, cursor: from + mark.length };
   const value = text.slice(from, to);
-  const unwrapped = (a, b, content) => ({
+  const unwrapped = (a: number, b: number, content: string): Change => ({
     from: a,
     to: b,
     insert: content,
@@ -346,7 +383,7 @@ function wrapInline(text, from, to, mark) {
     selectTo: a + content.length,
   });
   if (mark === '`') {
-    const stripPadding = (s) =>
+    const stripPadding = (s: string) =>
       s.startsWith(' ') && s.endsWith(' ') && /\S/.test(s) ? s.slice(1, -1) : s;
     const enclosed = /^(`+)([\s\S]*?)\1$/.exec(value);
     if (enclosed && !enclosed[2].includes(enclosed[1]))
@@ -397,7 +434,7 @@ function wrapInline(text, from, to, mark) {
     selectTo: to + mark.length,
   };
 }
-module.exports = {
+export {
   COLORS,
   BACKGROUNDS,
   ALIGNS,

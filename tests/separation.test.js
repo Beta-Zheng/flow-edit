@@ -48,7 +48,7 @@ test('plugin contains only control styling and explicit user formatting', () => 
           ),
       );
   }
-  for (const name of ['editor.js', 'reading.js', 'plugin.js']) {
+  for (const name of ['editor.ts', 'reading.ts', 'plugin.ts']) {
     const js = fs.readFileSync(path.join(base, 'src', name), 'utf8');
     assert.doesNotMatch(
       js,

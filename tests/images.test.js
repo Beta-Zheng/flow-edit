@@ -1,9 +1,9 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const images = require('../src/images');
-const { blocks } = require('../src/core');
-const { JSDOM } = require('jsdom');
+const images = require('../.host-build/modules/images');
+const { blocks } = require('../.host-build/modules/core');
+const { JSDOM } = require('./helpers/dom.cjs');
 const apply = (text, change) => text.slice(0, change.from) + change.insert + text.slice(change.to);
 const source = '![[附件/第一张.png|300]]\n\n![第二张](<附件/第二张 (1).png>)';
 
@@ -234,12 +234,12 @@ test('live preview takes ownership from nested markdown rendering without duplic
 });
 
 test('reading view saves atomically and refuses an intervening source edit', async () => {
-  const { readingSupport } = require('../src/reading');
+  const { readingSupport } = require('../.host-build/modules/reading');
   const h = dragHarness();
   h.controller.destroy();
   const source = '> [!flow-gallery-2|widths=50,50]\n> ![[a.png]]\n>\n> ![[b.png]]';
   let current = source;
-  const file = { path: 'reading-images.md' };
+  const file = { path: 'reading-images.md', extension: 'md' };
   const plugin = {
     readers: new Set(),
     imageNotice: (message) => h.errors.push(message),
@@ -289,7 +289,7 @@ test('live preview resize preserves its caret outside the gallery and supports u
   const { EditorState, StateField } = require('@codemirror/state');
   const { EditorView, WidgetType, Decoration } = require('@codemirror/view');
   const { history, undo } = require('@codemirror/commands');
-  const { editorExtension } = require('../src/editor');
+  const { editorExtension } = require('../.host-build/modules/editor');
   const dom = new JSDOM('<body></body>', { pretendToBeVisual: true }),
     previous = {};
   for (const key of [

@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const c = require('../src/core');
+const c = require('../.host-build/modules/core');
 const apply = (text, change) => text.slice(0, change.from) + change.insert + text.slice(change.to);
 test('callout type switching preserves title, fold, metadata and arbitrary body bytes', () => {
   const text =

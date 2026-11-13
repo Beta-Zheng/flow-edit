@@ -22,7 +22,7 @@ For manual installation, put this folder under `<vault-config-dir>/plugins/flow-
 
 ## GitHub release
 
-Obsidian downloads **individual** `main.js`, `manifest.json` and `styles.css` assets from the GitHub release whose tag exactly matches `manifest.version`. A ZIP alone is insufficient. The tag must be `0.0.1`, not `v0.0.1`, for this version.
+Obsidian downloads **individual** `main.js`, `manifest.json` and `styles.css` assets from the GitHub release whose tag exactly matches `manifest.version`. A ZIP alone is insufficient. Use the exact version from `manifest.json`, without a `v` prefix.
 
 The release workflow validates that relationship, runs checks, builds normal artifacts and publishes those three assets when a version tag is pushed. Review and commit source changes first. Configure the actual repository/maintainers before intentionally pushing a release tag. No remote publication is performed by the local check/build commands.
 
@@ -33,6 +33,18 @@ The publication target is `Beta-Zheng/flow-edit`. A local standards check is not
 After committing reviewed changes, run `npm run release:preflight`. It verifies the committed source set, a clean worktree, private/generated-file exclusions and the release assets, and prints their SHA256 hashes. The GitHub release workflow repeats this check before publication.
 
 Keep `minAppVersion` accurate. It remains `1.5.0` because the runtime continues using APIs available at that level; the official API linter is part of CI. Test the oldest supported version before publicly claiming full compatibility. `isDesktopOnly` remains `false` because the distributed runtime has no Node.js/Electron imports; mobile interaction acceptance remains a separate check.
+
+## Provenance verification
+
+The release workflow generates GitHub artifact attestations for `main.js`, `manifest.json` and `styles.css`, then verifies their repository, signing workflow, source commit and hosted runner before uploading the release. Signing permissions are confined to the release job; the attestation action is pinned to its official commit. Existing older releases are not retroactively signed by this configuration.
+
+After downloading an asset, verify it with:
+
+```sh
+gh attestation verify main.js --repo Beta-Zheng/flow-edit --signer-workflow Beta-Zheng/flow-edit/.github/workflows/release.yml --deny-self-hosted-runners
+```
+
+Clipboard access is limited to writing the selected block or block link after an explicit copy/cut action. The runtime does not read the clipboard and does not transmit it.
 
 Official references:
 

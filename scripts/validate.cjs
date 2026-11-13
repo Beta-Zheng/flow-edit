@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const assets = ['main.js', 'manifest.json', 'styles.css', 'README.md', 'LICENSE'];
-const modules = ['core', 'images', 'editor', 'plugin', 'reading', 'ui'];
+const modules = ['core', 'dom', 'images', 'editor', 'plugin', 'reading', 'ui'];
 const externals = new Set(['obsidian', '@codemirror/state', '@codemirror/view']);
 const json = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 const semver = /^\d+\.\d+\.\d+$/;
@@ -32,24 +32,27 @@ function validateManifest(manifest) {
 
 function validateSources() {
   for (const name of modules) {
-    const file = path.join(root, 'src', name + '.js'),
+    const file = path.join(root, 'src', name + '.ts'),
       text = fs.readFileSync(file, 'utf8');
-    const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const visit = (node) => {
-      if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === 'require'
-      ) {
+      if (ts.isImportDeclaration(node) || (ts.isExportDeclaration(node) && node.moduleSpecifier)) {
         assert.ok(
-          node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0]),
-          file + ': only static imports are allowed',
+          ts.isStringLiteral(node.moduleSpecifier),
+          file + ': static module paths required',
         );
-        const id = node.arguments[0].text;
+        const id = node.moduleSpecifier.text;
         assert.ok(
           externals.has(id) || modules.some((m) => id === './' + m),
           file + ': forbidden runtime dependency ' + id,
         );
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ((ts.isIdentifier(node.expression) && node.expression.text === 'require') ||
+          node.expression.kind === ts.SyntaxKind.ImportKeyword)
+      ) {
+        assert.fail(file + ': source must use static ESM imports');
       }
       if (
         ts.isPropertyAccessExpression(node) &&

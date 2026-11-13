@@ -1,9 +1,21 @@
-'use strict';
-const { blocks, blockAt } = require('./core');
+import { blocks, blockAt, type Change } from './core';
+import { windowFor, type AppWindow } from './dom';
+export interface GalleryTarget {
+  from: number;
+  to: number;
+  text: string;
+  images: string[];
+  columns: number;
+  widths: number[];
+  gallery: boolean;
+}
+export interface GalleryCapture {
+  target: GalleryTarget;
+}
 const headerPattern = /^> \[!flow-gallery-([1-4])(?:\|widths=([\d.,-]+))?\]$/;
 
 // Parse whole image-only selections; never consume surrounding prose or note embeds.
-function imageTokens(text) {
+function imageTokens(text: string): string[] | null {
   const result = [];
   let rest = text.trim();
   while (rest) {
@@ -56,15 +68,17 @@ function imageTokens(text) {
   }
   return result.length ? result : null;
 }
-function safeWidths(value, count, columns) {
-  const parsed = typeof value === 'string' ? value.split(',').map(Number) : value;
-  return Array.isArray(parsed) &&
-    parsed.length === count &&
-    parsed.every((n) => Number.isFinite(n) && n >= 10 && n <= 100)
+function safeWidths(value: unknown, count: number, columns: number): number[] {
+  const raw: unknown = typeof value === 'string' ? value.split(',').map(Number) : value;
+  const parsed: unknown[] = Array.isArray(raw) ? raw : [];
+  return parsed.length === count &&
+    parsed.every(
+      (n): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 10 && n <= 100,
+    )
     ? parsed
-    : Array(count).fill(Number((100 / columns).toFixed(2)));
+    : Array.from({ length: count }, () => Number((100 / columns).toFixed(2)));
 }
-function galleryTarget(text, from, to) {
+function galleryTarget(text: string, from: number, to: number): GalleryTarget {
   const all = blocks(text),
     current = blockAt(text, from, all);
   const header = headerPattern.exec(current.text.split('\n')[0]);
@@ -118,7 +132,7 @@ function galleryTarget(text, from, to) {
   // Leave selected blank-line separators outside the replacement range.
   if (candidates.length) {
     from = candidates[0].contentFrom;
-    to = candidates.at(-1).to;
+    to = candidates[candidates.length - 1].to;
   }
   const selected = text.slice(from, to),
     images = imageTokens(selected);
@@ -133,7 +147,7 @@ function galleryTarget(text, from, to) {
     gallery: false,
   };
 }
-function galleryHeader(columns, widths) {
+function galleryHeader(columns: number, widths: number[]) {
   return (
     '> [!flow-gallery-' +
     columns +
@@ -142,7 +156,7 @@ function galleryHeader(columns, widths) {
     ']'
   );
 }
-function layoutChange(target, columns) {
+function layoutChange(target: GalleryTarget, columns: number): Change {
   if (![0, 1, 2, 3, 4].includes(columns)) throw new Error('不支持的图片列数');
   const body = target.images.join('\n\n');
   return {
@@ -159,14 +173,14 @@ function layoutChange(target, columns) {
             .join('\n'),
   };
 }
-function widthChange(target, widths) {
+function widthChange(target: GalleryTarget, widths: number[]): Change {
   return {
     from: target.from,
     to: target.from + target.text.split('\n')[0].length,
     insert: galleryHeader(target.columns, safeWidths(widths, target.images.length, target.columns)),
   };
 }
-function resizeWidths(widths, columns, index, delta) {
+function resizeWidths(widths: number[], columns: number, index: number, delta: number): number[] {
   const result = [...widths],
     start = Math.floor(index / columns) * columns;
   const peer =
@@ -182,16 +196,41 @@ function resizeWidths(widths, columns, index, delta) {
 }
 
 // Own the controls without moving or replacing Obsidian's rendered image nodes.
-const imageOwners = new WeakMap();
-class ImageLayouts {
-  constructor(root, resolve, save, report, editable = false) {
+const imageOwners = new WeakMap<
+  HTMLElement,
+  { editable: boolean; release(node: HTMLElement): void }
+>();
+interface ImageEntry {
+  signature: string;
+  cards: HTMLElement[];
+  controls: HTMLButtonElement[];
+  dispose(): void;
+}
+class ImageLayouts<C extends GalleryCapture = GalleryCapture> {
+  root: HTMLElement;
+  resolve: (node: HTMLElement) => C | Promise<C>;
+  save: (captured: C, change: Change) => void | Promise<void>;
+  report: (error: unknown) => void;
+  editable: boolean;
+  entries: Map<HTMLElement, ImageEntry>;
+  win: AppWindow;
+  observer: MutationObserver;
+  dead = false;
+  frame = 0;
+  constructor(
+    root: HTMLElement,
+    resolve: (node: HTMLElement) => C | Promise<C>,
+    save: (captured: C, change: Change) => void | Promise<void>,
+    report: (error: unknown) => void,
+    editable = false,
+  ) {
     this.root = root;
     this.resolve = resolve;
     this.save = save;
     this.report = report;
     this.editable = editable;
     this.entries = new Map();
-    this.win = root.ownerDocument.defaultView;
+    this.win = windowFor(root.ownerDocument);
     this.observer = new this.win.MutationObserver(() => this.schedule());
     this.observer.observe(root, {
       childList: true,
@@ -219,7 +258,7 @@ class ImageLayouts {
         this.release(node);
       }
     }
-    const nodes = [...this.root.querySelectorAll('[data-callout^="flow-gallery-"]')];
+    const nodes = [...this.root.querySelectorAll<HTMLElement>('[data-callout^="flow-gallery-"]')];
     if (this.root.matches('[data-callout^="flow-gallery-"]')) nodes.unshift(this.root);
     for (const node of nodes) {
       if (this.entries.has(node)) continue;
@@ -228,11 +267,13 @@ class ImageLayouts {
         if (!this.editable || owner.editable) continue;
         owner.release(node);
       }
-      const columns = Number(node.dataset.callout.slice('flow-gallery-'.length));
+      const columns = Number(node.dataset.callout?.slice('flow-gallery-'.length));
       if (![1, 2, 3, 4].includes(columns)) continue;
-      const content = node.querySelector(':scope > .callout-content');
+      const content = node.querySelector<HTMLElement>(':scope > .callout-content');
+      if (!content) continue;
       const cards = [...(content?.children || [])].filter(
-        (n) => n.tagName === 'P' && n.querySelector('img, .image-embed'),
+        (n): n is HTMLParagraphElement =>
+          n.tagName === 'P' && !!n.querySelector('img, .image-embed'),
       );
       if (!cards.length) continue;
       const widths = safeWidths(
@@ -240,15 +281,15 @@ class ImageLayouts {
         cards.length,
         columns,
       );
-      const paint = (values) =>
+      const paint = (values: number[]) =>
         cards.forEach((card, i) =>
           card.style.setProperty('--flow-image-share', String(values[i] / 100)),
         );
       paint(widths);
       cards.forEach((card) => card.classList.add('flow-image-card'));
-      const controls = [],
-        removers = [];
-      let cancelled = null;
+      const controls: HTMLButtonElement[] = [],
+        removers: (() => void)[] = [];
+      let cancelled: (() => void) | null = null;
       for (const [index, card] of cards.entries()) {
         // One divider between neighbors; a row's outer edge stays stationary.
         if (
@@ -257,7 +298,7 @@ class ImageLayouts {
           (index % columns === columns - 1 || index === cards.length - 1)
         )
           continue;
-        const handle = node.ownerDocument.createElement('button');
+        const handle = windowFor(node.ownerDocument).createEl('button');
         handle.type = 'button';
         handle.className = 'flow-image-resizer';
         handle.title = '拖拽调整宽度 · 方向键微调';
@@ -266,9 +307,9 @@ class ImageLayouts {
         card.classList.add('flow-image-card');
         card.append(handle);
         controls.push(handle);
-        const begin = async (event) => {
-          if (event.type === 'pointerdown' && event.button !== 0) return;
-          if (event.type === 'keydown' && !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        const begin = async (event: PointerEvent | KeyboardEvent) => {
+          if ('button' in event && event.button !== 0) return;
+          if ('key' in event && !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
           event.preventDefault();
           event.stopPropagation();
           if (cancelled) return;
@@ -277,7 +318,7 @@ class ImageLayouts {
             if (this.dead || !node.isConnected) return;
             if (captured.target.images.length !== cards.length)
               throw new Error('图片尚未渲染完成，请稍后重试');
-            if (event.type === 'keydown') {
+            if ('key' in event) {
               const values = resizeWidths(
                 captured.target.widths,
                 columns,
@@ -295,7 +336,7 @@ class ImageLayouts {
             const available = box.width - gap * scale * (columns - 1);
             if (available <= 0) return;
             let values = original;
-            const move = (e) => {
+            const move = (e: PointerEvent) => {
               if (e.pointerId !== event.pointerId) return;
               values = resizeWidths(
                 original,
@@ -306,13 +347,10 @@ class ImageLayouts {
               paint(values);
             };
             const cleanup = () => {
-              for (const [type, fn] of [
-                ['pointermove', move],
-                ['pointerup', end],
-                ['pointercancel', cancel],
-                ['keydown', escape],
-              ])
-                this.win.removeEventListener(type, fn, true);
+              this.win.removeEventListener('pointermove', move, true);
+              this.win.removeEventListener('pointerup', end, true);
+              this.win.removeEventListener('pointercancel', cancel, true);
+              this.win.removeEventListener('keydown', escape, true);
               this.win.removeEventListener('blur', cancel);
               handle.removeEventListener('lostpointercapture', cancel);
               if (handle.hasPointerCapture?.(event.pointerId))
@@ -324,7 +362,7 @@ class ImageLayouts {
               cleanup();
               paint(original);
             };
-            const end = (e) => {
+            const end = (e: PointerEvent) => {
               if (e.pointerId !== event.pointerId) return;
               move(e);
               cleanup();
@@ -339,7 +377,7 @@ class ImageLayouts {
                   this.report(err);
                 });
             };
-            const escape = (e) => {
+            const escape = (e: KeyboardEvent) => {
               if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
@@ -367,7 +405,7 @@ class ImageLayouts {
         handle.addEventListener('pointerdown', begin);
         handle.addEventListener('keydown', begin);
         // Clicks after a drag must not open Obsidian's image viewer.
-        const click = (e) => {
+        const click = (e: MouseEvent) => {
           e.preventDefault();
           e.stopPropagation();
         };
@@ -395,7 +433,7 @@ class ImageLayouts {
       imageOwners.set(node, this);
     }
   }
-  release(node) {
+  release(node: HTMLElement) {
     this.entries.get(node)?.dispose();
     this.entries.delete(node);
     if (imageOwners.get(node) === this) imageOwners.delete(node);
@@ -407,7 +445,7 @@ class ImageLayouts {
     for (const node of this.entries.keys()) this.release(node);
   }
 }
-module.exports = {
+export {
   imageTokens,
   galleryTarget,
   layoutChange,

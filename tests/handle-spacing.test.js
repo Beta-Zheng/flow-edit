@@ -2,10 +2,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { JSDOM } = require('jsdom');
+const { JSDOM } = require('./helpers/dom.cjs');
 const { EditorState, StateField } = require('@codemirror/state');
 const { EditorView } = require('@codemirror/view');
-const { editorExtension, refresh } = require('../src/editor');
+const { editorExtension, refresh } = require('../.host-build/modules/editor');
 
 const scenarios = [
   { name: 'normal heading', space: 80, foldLeft: 56 },
