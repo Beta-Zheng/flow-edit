@@ -2,6 +2,7 @@
 const O = require('obsidian');
 const core = require('./core');
 const ui = require('./ui');
+const images = require('./images');
 const { editorExtension, refresh } = require('./editor');
 const { readingSupport } = require('./reading');
 const DEFAULTS = { slashMenu: true, blockHandles: true, selectionToolbar: true };
@@ -183,6 +184,9 @@ class SettingsTab extends O.PluginSettingTab {
   }
 }
 class FlowEdit extends O.Plugin {
+  imageNotice(message) {
+    new O.Notice(message);
+  }
   async onload() {
     this.settings = safeSettings(await this.loadData());
     this.editors = new Set();
@@ -199,13 +203,22 @@ class FlowEdit extends O.Plugin {
       this.app.workspace.on('editor-menu', (menu, editor, view) => {
         if (!view.file) return;
         const offset = editor.posToOffset(editor.getCursor());
-        if (core.blockAt(editor.getValue(), offset).type === 'callout')
+        if (
+          core.blockAt(editor.getValue(), offset).type === 'callout' &&
+          !/^> \[!flow-gallery-/.test(core.blockAt(editor.getValue(), offset).text)
+        )
           menu.addItem((item) =>
             item
               .setTitle('更改高亮块类型…')
               .setIcon('panel-top')
               .onClick(() => this.openCalloutTypes(editor, view.file, offset)),
           );
+        menu.addItem((item) =>
+          item
+            .setTitle('Flow Edit · 图片布局')
+            .setIcon('images')
+            .onClick(() => this.openImageLayout(editor, view.file)),
+        );
         menu.addItem((item) =>
           item
             .setTitle('Flow Edit · 块操作')
@@ -229,6 +242,11 @@ class FlowEdit extends O.Plugin {
         if (this.popup && this.popupSession && !this.popupSession.valid()) this.closePopup();
       }),
     );
+    this.addCommand({
+      id: 'image-layout',
+      name: '调整图片布局',
+      editorCallback: (editor, ctx) => this.openImageLayout(editor, ctx.file),
+    });
     this.addCommand({
       id: 'block-menu',
       name: '打开块操作菜单',
@@ -328,6 +346,60 @@ class FlowEdit extends O.Plugin {
       new O.Notice('Flow Edit 设置保存失败，请重试');
       console.error('Flow Edit:', e);
     }
+  }
+  openImageLayout(editor, file) {
+    this.perform(editor, file, () => {
+      const s = this.session(editor, file);
+      const target = images.galleryTarget(
+        s.snapshot,
+        editor.posToOffset(editor.getCursor('from')),
+        editor.posToOffset(editor.getCursor('to')),
+      );
+      this.closePopup();
+      const doc = this.documentFor(editor);
+      const menu = ui.openPopup({
+        doc,
+        anchor: editor.cursorCoords(true, 'window'),
+        setIcon: O.setIcon,
+        label: '图片布局',
+        returnFocus: () => editor.focus(),
+      });
+      this.popup = menu;
+      this.popupSession = s;
+      menu.root.append(
+        ui.el(
+          doc,
+          'div',
+          'flow-menu-heading',
+          target.images.length + ' 张图片 · 拖拽边缘可微调宽度',
+        ),
+      );
+      for (const columns of [1, 2, 3, 4, 0])
+        menu.button(
+          menu.root,
+          columns ? '每行 ' + columns + ' 张（均分）' : '恢复普通图片',
+          columns ? 'columns-2' : 'undo-2',
+          () => {
+            this.perform(editor, file, () => {
+              if (!s.valid()) throw new Error('文档已更改，请重新打开图片布局');
+              const change = images.layoutChange(target, columns);
+              if (columns) {
+                const remaining = s.snapshot.slice(change.to);
+                if (!remaining) change.insert += '\n\n';
+                change.cursor = change.from + change.insert.length + (remaining ? 1 : 0);
+              }
+              this.change(editor, change);
+              this.closePopup();
+            });
+          },
+          {
+            active: target.gallery && columns === target.columns,
+            disabled: columns === 0 && !target.gallery,
+          },
+        );
+      menu.position();
+      menu.focus();
+    });
   }
   session(editor, file) {
     if (!file) throw new Error('请先打开 Markdown 笔记');

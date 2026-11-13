@@ -25,6 +25,7 @@ test('public release requires tracked sources and excludes personal files or cre
     'package-lock.json',
     'src/plugin.js',
     'src/core.js',
+    'src/images.js',
     'src/editor.js',
     'src/ui.js',
     'src/reading.js',

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const assets = ['main.js', 'manifest.json', 'styles.css', 'README.md', 'LICENSE'];
-const modules = ['core', 'editor', 'plugin', 'reading', 'ui'];
+const modules = ['core', 'images', 'editor', 'plugin', 'reading', 'ui'];
 const externals = new Set(['obsidian', '@codemirror/state', '@codemirror/view']);
 const json = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 const semver = /^\d+\.\d+\.\d+$/;

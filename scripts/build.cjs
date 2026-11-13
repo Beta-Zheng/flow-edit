@@ -8,7 +8,7 @@ for (const arg of args)
 const hostQA = args.includes('--host-qa');
 if (hostQA && args.includes('--release'))
   throw new Error('Host QA must never be included in a release build');
-const names = ['core', 'ui', 'editor', 'reading', 'plugin'];
+const names = ['core', 'images', 'ui', 'editor', 'reading', 'plugin'];
 const modules = names
   .map(
     (name) =>

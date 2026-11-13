@@ -19,6 +19,7 @@ function validateTrackedFiles(files, read) {
     'package-lock.json',
     'src/plugin.js',
     'src/core.js',
+    'src/images.js',
     'src/editor.js',
     'src/ui.js',
     'src/reading.js',

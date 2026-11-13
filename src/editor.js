@@ -3,6 +3,7 @@ const { StateField, StateEffect } = require('@codemirror/state');
 const { EditorView, Decoration, ViewPlugin, showTooltip } = require('@codemirror/view');
 const core = require('./core');
 const ui = require('./ui');
+const { ImageLayouts, galleryTarget } = require('./images');
 const refresh = StateEffect.define();
 
 function editorExtension(plugin, { editorInfoField, setIcon }) {
@@ -190,6 +191,7 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
           '.callout > .callout-title > .callout-icon',
         )) {
           if (node.closest('.callout').parentElement?.closest('.callout')) continue;
+          if (/^flow-gallery-/.test(node.closest('.callout').dataset.callout || '')) continue;
           let block;
           try {
             block = core.blockAt(
@@ -619,6 +621,66 @@ function editorExtension(plugin, { editorInfoField, setIcon }) {
       },
     };
   });
-  return [styles, handles, lifecycle, selecting, selectionCompletion, selection, attributes];
+  const imageLayouts = ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.controller = new ImageLayouts(
+          view.contentDOM,
+          (node) => {
+            const ctx = info(view),
+              snapshot = view.state.doc.toString();
+            const offset = view.posAtDOM(node);
+            return {
+              snapshot,
+              editor: ctx.editor,
+              file: ctx.file,
+              target: galleryTarget(snapshot, offset, offset),
+            };
+          },
+          (captured, change) => {
+            const ctx = info(view);
+            if (
+              ctx.editor !== captured.editor ||
+              ctx.file !== captured.file ||
+              view.state.doc.toString() !== captured.snapshot
+            )
+              throw new Error('文档已更改，已取消图片调整');
+            const selection = view.state.selection.main;
+            const mapped = core.retainSelection(change, captured.snapshot, {
+              from: selection.anchor,
+              to: selection.head,
+            });
+            if (mapped)
+              view.dispatch({
+                changes: { from: mapped.from, to: mapped.to, insert: mapped.insert },
+                selection: { anchor: mapped.selectFrom, head: mapped.selectTo },
+                userEvent: 'input.flow-image-resize',
+              });
+          },
+          (err) =>
+            plugin.perform(info(view)?.editor, info(view)?.file, () => {
+              throw err;
+            }),
+          true,
+        );
+      }
+      update() {
+        this.controller.schedule();
+      }
+      destroy() {
+        this.controller.destroy();
+      }
+    },
+  );
+  return [
+    styles,
+    handles,
+    lifecycle,
+    selecting,
+    selectionCompletion,
+    selection,
+    attributes,
+    imageLayouts,
+  ];
 }
 module.exports = { editorExtension, refresh };

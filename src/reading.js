@@ -1,5 +1,6 @@
 'use strict';
 const { blocks } = require('./core');
+const { ImageLayouts, galleryTarget } = require('./images');
 
 // Style only renderer sections with one unambiguous source block.
 // No text matching: duplicate paragraphs must never inherit a neighbor's style.
@@ -34,6 +35,36 @@ function readingSupport(plugin, { MarkdownRenderChild }) {
     }
     onload() {
       plugin.readers.add(this);
+      this.images = new ImageLayouts(
+        this.root,
+        async (node) => {
+          const file = plugin.app.vault.getAbstractFileByPath(this.ctx.sourcePath);
+          if (!file) throw new Error('图片所在笔记已移动或删除');
+          const snapshot = await plugin.app.vault.cachedRead(file),
+            info = this.ctx.getSectionInfo(node);
+          if (!info) throw new Error('无法定位图片源文，请在编辑视图中调整');
+          const candidates = blocks(snapshot).filter(
+            (b) =>
+              b.contentLine >= info.lineStart &&
+              b.endLine <= info.lineEnd &&
+              /^> \[!flow-gallery-/.test(b.text),
+          );
+          if (candidates.length !== 1) throw new Error('图片组定位不明确，请在编辑视图中调整');
+          const offset = candidates[0].contentFrom;
+          return { file, snapshot, target: galleryTarget(snapshot, offset, offset) };
+        },
+        async (captured, change) => {
+          if (this.dead) throw new Error('笔记视图已关闭');
+          await plugin.app.vault.process(captured.file, (text) => {
+            if (text !== captured.snapshot) throw new Error('文档已更改，已取消图片调整');
+            return text.slice(0, change.from) + change.insert + text.slice(change.to);
+          });
+        },
+        (err) => {
+          console.error('Flow Edit:', err);
+          plugin.imageNotice(err.message);
+        },
+      );
       this.repaint().catch((e) => console.error('Flow Edit:', e));
     }
     async repaint() {
@@ -53,6 +84,7 @@ function readingSupport(plugin, { MarkdownRenderChild }) {
     }
     onunload() {
       this.dead = true;
+      this.images?.destroy();
       plugin.readers.delete(this);
       applyReadingStyle(this.root, null, '');
       if (![...plugin.readers].some((r) => r.ctx.sourcePath === this.ctx.sourcePath))

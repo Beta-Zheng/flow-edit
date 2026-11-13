@@ -212,6 +212,36 @@ test('native EditorSuggest recognizes slash input and inserts without private ho
   assert.equal(h.editor.getValue(), '## ');
   h.close();
 });
+test('image layout menu applies an undoable gallery and refuses stale changes', async () => {
+  const h = harness();
+  await h.p.onload();
+  try {
+    const source = '![[a.png]]\n\n![[b.png]]';
+    h.dispatch({
+      changes: { from: 0, to: h.editor.getValue().length, insert: source },
+      annotations: Transaction.addToHistory.of(false),
+    });
+    const command = h.commands.find((c) => c.id === 'image-layout');
+    assert.ok(command);
+    command.editorCallback(h.editor, { file: h.file });
+    h.doc.querySelector('[aria-label="每行 2 张（均分）"]').click();
+    assert.match(h.editor.getValue(), /^> \[!flow-gallery-2\|widths=50,50\]/);
+    undo({ state: h.state(), dispatch: h.dispatch });
+    assert.equal(h.editor.getValue(), source);
+    redo({ state: h.state(), dispatch: h.dispatch });
+    h.p.openImageLayout(h.editor, h.file);
+    h.doc.querySelector('[aria-label="恢复普通图片"]').click();
+    assert.equal(h.editor.getValue(), source + '\n\n');
+    h.p.openImageLayout(h.editor, h.file);
+    h.dispatch({ changes: { from: 0, insert: '新内容\n' } });
+    h.doc.querySelector('[aria-label="每行 3 张（均分）"]').click();
+    assert.equal(h.editor.getValue(), '新内容\n' + source + '\n\n');
+    assert.match(h.notices.at(-1), /已更改/);
+  } finally {
+    h.close();
+  }
+});
+
 test('block conversion is a single undoable CodeMirror transaction', async () => {
   const h = harness();
   await h.p.onload();

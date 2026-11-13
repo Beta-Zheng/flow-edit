@@ -1,4 +1,69 @@
 /* Flow Edit: editor controls and explicit user formatting only. No document theme. */
+/* Explicit image groups, supported by Obsidian's native callout renderer. */
+.callout[data-callout^="flow-gallery-"] {
+  --flow-image-columns: 2;
+  container-type: inline-size;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+}
+.callout[data-callout="flow-gallery-1"] { --flow-image-columns: 1; }
+.callout[data-callout="flow-gallery-3"] { --flow-image-columns: 3; }
+.callout[data-callout="flow-gallery-4"] { --flow-image-columns: 4; }
+.callout[data-callout^="flow-gallery-"] > .callout-title { display: none; }
+.callout[data-callout^="flow-gallery-"] > .callout-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+}
+.callout[data-callout^="flow-gallery-"] > .callout-content > p {
+  position: relative;
+  flex: 0 0 calc((100% - (var(--flow-image-columns) - 1) * 12px) * var(--flow-image-share, calc(1 / var(--flow-image-columns))));
+  min-width: min(100%, 120px);
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+.callout[data-callout^="flow-gallery-"] > .callout-content > p .image-embed,
+.callout[data-callout^="flow-gallery-"] > .callout-content > p img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+}
+.flow-image-card > button.flow-image-resizer {
+  appearance: none;
+  position: absolute;
+  top: 0;
+  right: -8px;
+  z-index: 2;
+  width: 18px;
+  height: 100%;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  border-radius: 6px;
+  background: transparent;
+  color: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.flow-image-card:hover > .flow-image-resizer,
+.flow-image-resizer:focus-visible,
+.flow-image-dragging .flow-image-resizer {
+  color: var(--text-accent, #245bdb);
+  background: var(--background-primary, white);
+  outline: 2px solid var(--text-accent, #245bdb);
+  outline-offset: -4px;
+}
+.flow-image-dragging { user-select: none; }
 .flow-position-probe { position: fixed; left: 0; top: 0; width: 100px; height: 100px; visibility: hidden; pointer-events: none; border: 0; padding: 0; margin: 0; }
 .flow-option-check-hidden { visibility: hidden; }
 .flow-popup, .flow-toolbar, .flow-slash {

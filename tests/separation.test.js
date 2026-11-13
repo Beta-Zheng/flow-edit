@@ -32,8 +32,22 @@ test('plugin contains only control styling and explicit user formatting', () => 
   const css = fs.readFileSync(path.join(base, 'styles.css'), 'utf8');
   assert.doesNotMatch(
     css,
-    /flow-page|flow-preview|HyperMD-header|HyperMD-quote|\.callout|--file-line-width|--font-text-size|--lumen-/,
+    /flow-page|flow-preview|HyperMD-header|HyperMD-quote|--file-line-width|--font-text-size|--lumen-/,
   );
+  // Native callouts are styled only when explicitly opted into an image group.
+  for (const rule of css.replace(/\/\*[\s\S]*?\*\//g, '').split('}')) {
+    const selector = rule.slice(0, rule.indexOf('{'));
+    if (selector.includes('.callout'))
+      assert.ok(
+        selector
+          .split(',')
+          .every(
+            (part) =>
+              part.includes('[data-callout^="flow-gallery-"]') ||
+              part.includes('[data-callout="flow-gallery-'),
+          ),
+      );
+  }
   for (const name of ['editor.js', 'reading.js', 'plugin.js']) {
     const js = fs.readFileSync(path.join(base, 'src', name), 'utf8');
     assert.doesNotMatch(
