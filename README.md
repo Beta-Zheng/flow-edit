@@ -13,7 +13,7 @@
 
 ### 功能截图
 
-基于当前源码的浏览器演示，截图以 2 倍像素导出。
+基于 0.0.4 源码的浏览器演示，截图以 2 倍像素导出，无鼠标指针。
 
 **内容插入**
 
@@ -25,7 +25,12 @@
 
 **文字格式**
 
-![选中文字后的格式工具栏](screenshots/flow-edit-hd-selection.png)
+![纯图标文字格式工具栏](screenshots/flow-edit-hd-selection.png)
+
+**颜色与对齐**
+
+<img src="screenshots/flow-edit-hd-color.png" alt="统一的块颜色面板" width="280">
+<img src="screenshots/flow-edit-hd-align.png" alt="带选中勾的块对齐面板" width="280">
 
 **高亮块类型**
 
