@@ -37,6 +37,7 @@ const paths = {
   'arrow-up': 'M12 20V4M5 11l7-7 7 7',
   'arrow-down': 'M12 4v16M5 13l7 7 7-7',
   'chevron-left': 'M15 5l-7 7 7 7',
+  'chevron-down': 'M6 9l6 6 6-6',
   'panel-top': 'M3 4h18v16H3V4M3 9h18',
   table: 'M3 3h18v18H3V3M3 9h18M3 15h18M9 3v18M15 3v18',
   'square-plus': 'M3 3h18v18H3V3M7 12h10M12 7v10',

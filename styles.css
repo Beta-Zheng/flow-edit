@@ -129,10 +129,10 @@
 .flow-toolbar button.flow-tool-button { display: inline-flex; justify-content: center; align-items: center; width: 32px; height: 32px; min-width: 0; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; box-shadow: none; cursor: pointer; }
 .flow-toolbar button:hover, .flow-toolbar button:focus-visible { background: var(--flow-hover); }
 .flow-toolbar button.is-active { color: var(--flow-accent); background: var(--flow-selected); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flow-accent) 28%, transparent); }
-.flow-toolbar button.flow-tool-select { width: auto; max-width: 158px; gap: 5px; padding-inline: 7px; }
-.flow-tool-prefix { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
-.flow-tool-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.flow-tool-chevron { color: var(--text-muted); font-size: 12px; }
+.flow-toolbar button.flow-tool-menu { width: 44px; gap: 4px; padding-inline: 4px; }
+.flow-toolbar .flow-icon svg { width: 18px; height: 18px; stroke-width: 1.75; }
+.flow-toolbar .flow-tool-chevron { width: 10px; height: 12px; flex-basis: 10px; color: var(--text-muted, #646a73); }
+.flow-toolbar .flow-tool-chevron svg { width: 10px; height: 12px; stroke-width: 1.8; }
 .flow-toolbar button.flow-tool-button[hidden] { display: none; }
 .flow-toolbar button:disabled, .flow-popup button:disabled { opacity: .35; cursor: not-allowed; }
 .flow-toolbar button:focus-visible { outline: 2px solid var(--flow-accent); outline-offset: -2px; }

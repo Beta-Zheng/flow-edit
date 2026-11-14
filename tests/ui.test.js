@@ -211,12 +211,15 @@ test('toolbar differentiates block and callout type and updates current icons', 
   const type = root.querySelector('[data-flow-action="type"]'),
     callout = root.querySelector('[data-flow-action="callout"]');
   assert.equal(type.dataset.flowIcon, 'panel-top');
-  assert.equal(type.querySelector('.flow-tool-prefix').textContent, '块');
-  assert.equal(callout.querySelector('.flow-tool-prefix').textContent, '标注');
-  assert.equal(callout.querySelector('.flow-tool-label').textContent, '警告');
+  assert.equal(root.querySelector('.flow-tool-prefix, .flow-tool-label'), null);
+  assert.equal(callout.title, '标注类型：警告');
+  assert.equal(callout.getAttribute('aria-description'), callout.title);
+  assert.equal(callout.dataset.flowIcon, 'triangle-alert');
+  assert.equal(type.querySelector('.flow-tool-chevron').getAttribute('aria-hidden'), 'true');
   ui.updateToolbar(root, [], { block: c.blocks('###### 六级标题')[0] });
   assert.equal(type.dataset.flowIcon, 'heading-6');
-  assert.equal(callout.querySelector('.flow-tool-prefix').textContent, '新建');
+  assert.equal(callout.title, '将当前块转为高亮块');
+  assert.equal(callout.dataset.flowIcon, 'square-plus');
   dom.window.close();
 });
 

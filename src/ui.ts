@@ -81,6 +81,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 function icon(doc: Document, name: string, setIcon?: SetIcon) {
   const span = el(doc, 'span', 'flow-icon');
+  span.setAttribute('aria-hidden', 'true');
   if (setIcon) setIcon(span, name);
   else
     span.textContent =
@@ -613,33 +614,27 @@ function updateToolbar(root: HTMLElement, active: string[] = [], context?: Toolb
       info = calloutInfo(block),
       type = root.querySelector<HTMLButtonElement>('[data-flow-action="type"]'),
       callout = root.querySelector<HTMLButtonElement>('[data-flow-action="callout"]');
-    function updateSelect(
-      button: HTMLButtonElement | null,
-      label: string,
-      name: string,
-      prefix: string,
-    ) {
+    function updateSelect(button: HTMLButtonElement | null, name: string, description: string) {
       if (!button) return;
-      const text = button.querySelector('.flow-tool-label'),
-        tag = button.querySelector('.flow-tool-prefix');
-      if (text && text.textContent !== label) text.textContent = label;
-      if (tag && tag.textContent !== prefix) tag.textContent = prefix;
+      button.title = description;
+      button.setAttribute('aria-description', description);
       if (button.dataset.flowIcon !== name) {
         button
-          .querySelector('.flow-icon')
+          .querySelector('.flow-icon:not(.flow-tool-chevron)')
           ?.replaceWith(icon(root.ownerDocument, name, toolbarIconRenderers.get(root)));
         button.dataset.flowIcon = name;
       }
     }
-    updateSelect(type, item?.label || '内容块', item?.icon || 'type', '块');
+    updateSelect(
+      type,
+      item?.icon || 'type',
+      '块类型：' + (item?.label || '内容块') + '（作用于整块）',
+    );
     updateSelect(
       callout,
-      info?.label || '高亮块',
-      CALLOUT_TYPES.find((x) => x.id === info?.canonical)?.icon || 'panel-top',
-      info ? '标注' : '新建',
+      CALLOUT_TYPES.find((x) => x.id === info?.canonical)?.icon || 'square-plus',
+      info ? '标注类型：' + info.label : '将当前块转为高亮块',
     );
-    if (type) type.title = '块类型：' + (item?.label || '内容块') + '（作用于整块）';
-    if (callout) callout.title = info ? '标注类型：' + info.label : '将当前块转为高亮块';
     for (const button of root.querySelectorAll<HTMLButtonElement>('[data-flow-convert]')) {
       const id = button.dataset.flowConvert;
       button.disabled = !canConvert(block, id || '');
@@ -661,10 +656,10 @@ function createToolbar(
   root.setAttribute('role', 'toolbar');
   root.setAttribute('aria-label', '文字格式');
   toolbarIconRenderers.set(root, setIcon);
-  function group(items: [string, string, string, string?][]) {
+  function group(items: [string, string, string][]) {
     const row = el(doc, 'div', 'flow-toolbar-group');
     root.append(row);
-    for (const [id, label, name, text] of items) {
+    for (const [id, label, name] of items) {
       const b = el(doc, 'button', 'flow-tool-button');
       b.type = 'button';
       b.title = label;
@@ -680,16 +675,13 @@ function createToolbar(
           e.preventDefault();
           e.stopPropagation();
         });
-      if (text) {
-        b.classList.add('flow-tool-select');
-        b.append(
-          el(doc, 'span', 'flow-tool-prefix'),
-          el(doc, 'span', 'flow-tool-label', text),
-          el(doc, 'span', 'flow-tool-chevron', '⌄'),
-        );
-      }
-      if (['type', 'callout', 'color', 'align'].includes(id))
+      if (['type', 'callout', 'color', 'align'].includes(id)) {
+        b.classList.add('flow-tool-menu');
+        const chevron = icon(doc, 'chevron-down', setIcon);
+        chevron.classList.add('flow-tool-chevron');
+        b.append(chevron);
         b.setAttribute('aria-haspopup', 'menu');
+      }
       b.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -699,8 +691,8 @@ function createToolbar(
     }
   }
   group([
-    ['type', '转换块类型', 'type', '正文'],
-    ['callout', '高亮块类型', 'panel-top', '高亮块'],
+    ['type', '转换块类型', 'type'],
+    ['callout', '高亮块类型', 'square-plus'],
   ]);
   group([
     ['bold', '加粗', 'bold'],
