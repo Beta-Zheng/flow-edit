@@ -86,7 +86,7 @@
   padding: 4px 0;
 }
 .flow-popup *, .flow-toolbar * { box-sizing: border-box; }
-.flow-menu-heading { display: flex; align-items: center; gap: 8px; min-height: 35px; padding: 5px 14px; color: var(--text-muted, #646a73); font-size: 13px; }
+.flow-menu-heading { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 8px 12px 4px; color: var(--text-normal, #24272e); font-size: 14px; font-weight: 600; }
 .flow-popup .flow-menu-heading button.flow-menu-item { width: 28px; flex: 0 0 28px; padding: 4px; min-height: 26px; }
 .flow-menu-heading > span { white-space: nowrap; }
 .flow-menu-heading .flow-menu-item > span:not(.flow-icon) { display: none; }
@@ -98,21 +98,23 @@
 }
 .flow-popup button.flow-menu-item:hover, .flow-popup button.flow-menu-item:focus-visible,
 .flow-popup button.flow-menu-item.is-active { background: var(--flow-hover); outline: none; }
-.flow-popup button.flow-menu-item.is-active { background: var(--flow-selected); color: var(--flow-accent); }
+.flow-popup button.flow-menu-item.is-active { background: var(--flow-selected); color: var(--flow-accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flow-accent) 28%, transparent); }
 .flow-popup button.flow-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--flow-accent); }
 .flow-popup button.flow-danger { color: var(--text-error, #d83931); }
 .flow-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 18px; }
-.flow-icon svg { width: 17px; height: 17px; stroke-width: 1.7; }
+.flow-icon svg { width: 18px; height: 18px; stroke-width: 1.75; }
 .flow-chevron, .flow-shortcut { margin-left: auto; color: var(--text-faint, #9aa1ad); font-size: 12px; }
-.flow-chevron { font-size: 20px; line-height: 16px; }
+.flow-chevron { width: 12px; height: 16px; flex-basis: 12px; }
+.flow-chevron svg { width: 12px; height: 16px; stroke-width: 1.8; }
 .flow-format-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
 .flow-popup button.flow-icon-button { justify-content: center; padding: 6px; min-height: 32px; }
 .flow-icon-button > span:not(.flow-icon) { display: none; }
 .flow-section-label { padding: 7px 10px 5px; color: var(--text-muted, #8f959e); font-size: 12px; }
 .flow-color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 5px 7px 8px; }
-.flow-popup button.flow-swatch { height: 35px; min-height: 35px; justify-content: center; border: 1px solid var(--flow-border); gap: 0; }
+.flow-popup button.flow-swatch { position: relative; height: 36px; min-height: 36px; justify-content: center; border: 1px solid var(--flow-border); gap: 0; }
 .flow-swatch > span:not(.flow-icon) { display: none; }
-.flow-swatch.is-active::after { content: "✓"; font-size: 10px; position: relative; top: -7px; width: 0; }
+.flow-swatch .flow-option-check { position: absolute; top: 3px; right: 3px; }
+.flow-swatch .flow-option-check svg { width: 12px; height: 12px; }
 .flow-popup input.flow-search { width: calc(100% - 24px); height: 36px; margin: 8px 12px 4px; padding: 8px; background: var(--flow-hover); border: 1px solid transparent; border-radius: 8px; box-shadow: none; }
 .flow-popup input.flow-search:focus { border-color: var(--flow-accent); outline: none; }
 .flow-insert-list { max-height: min(480px, calc(100vh - 90px)); overflow-y: auto; padding: 2px 6px 6px; }
@@ -136,8 +138,8 @@
 .flow-toolbar button.flow-tool-button[hidden] { display: none; }
 .flow-toolbar button:disabled, .flow-popup button:disabled { opacity: .35; cursor: not-allowed; }
 .flow-toolbar button:focus-visible { outline: 2px solid var(--flow-accent); outline-offset: -2px; }
-.flow-picker-title { padding: 10px 14px 4px; font-size: 14px; font-weight: 600; }
-.flow-picker-description { padding: 0 14px 10px; color: var(--text-muted); font-size: 12px; }
+.flow-picker-title { padding: 8px 12px 4px; min-height: 36px; display: flex; align-items: center; font-size: 14px; font-weight: 600; }
+.flow-picker-description { padding: 0 12px 8px; color: var(--text-muted); font-size: 12px; }
 .flow-popup.flow-callout-picker { width: 330px; }
 .flow-popup.flow-type-picker { width: 288px; }
 .flow-type-section { padding: 4px 8px 8px; }
@@ -150,7 +152,8 @@
 .flow-option-label { font-size: 13px; color: var(--text-normal); }
 .flow-option-description { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .flow-callout-option > .flow-icon:first-child { color: var(--flow-type-color); }
-.flow-option-check { width: 14px; flex-basis: 14px; color: var(--flow-accent); }
+.flow-option-check { width: 14px; flex-basis: 14px; margin-inline-start: auto; color: var(--flow-accent); }
+.flow-option-check svg { width: 14px; height: 14px; }
 .flow-type-blue { --flow-type-color: var(--color-blue,#3370ff); }.flow-type-green { --flow-type-color: var(--color-green,#23804b); }
 .flow-type-orange { --flow-type-color: var(--color-orange,#c56715); }.flow-type-purple { --flow-type-color: var(--color-purple,#7952b3); }
 .flow-type-red { --flow-type-color: var(--color-red,#d83931); }.flow-type-gray { --flow-type-color: var(--text-muted,#646a73); }

@@ -297,10 +297,17 @@ function openPopup({
       b.title = options.reason || label;
     }
     b.append(icon(doc, name, setIcon), el(doc, 'span', '', label));
-    if (options.next) b.append(el(doc, 'span', 'flow-chevron', '›'));
+    if (options.next) {
+      const chevron = icon(doc, 'chevron-right', setIcon);
+      chevron.classList.add('flow-chevron');
+      b.append(chevron);
+    }
     if (options.active) {
       b.classList.add('is-active');
       b.setAttribute('aria-current', 'true');
+      const check = icon(doc, 'check', setIcon);
+      check.classList.add('flow-option-check');
+      b.append(check);
     }
     b.addEventListener('click', () => {
       if (!options.next) close();
@@ -357,39 +364,19 @@ function blockMenu(options: BlockMenuOptions) {
     return s;
   }
   function palette() {
-    head('颜色', true);
-    for (const [key, values, title] of [
-      ['color', COLORS, '文字颜色'],
-      ['background', BACKGROUNDS, '背景颜色'],
-    ] as const) {
-      const s = section();
-      s.append(el(doc, 'div', 'flow-section-label', title));
-      const grid = el(doc, 'div', 'flow-color-grid');
-      for (const c of values) {
-        const b = menu.button(grid, COLOR_NAMES[c], 'type', () => act('style', { [key]: c }), {
-          active: (block.style?.[key] || (key === 'color' ? 'default' : 'none')) === c,
-        });
-        b.classList.add('flow-swatch', `flow-${key}-${c}`);
-      }
-      s.append(grid);
-    }
+    head('块颜色', true);
+    root.append(el(doc, 'div', 'flow-picker-description', '应用于当前整个内容块'));
+    styleOptions(menu, doc, block, 'color', (style) => act('style', style));
     menu.position();
     menu.focus();
   }
   function alignment() {
-    head('缩进和对齐', true);
-    const s = section();
-    for (const [value, label, icon] of [
-      ['left', '左对齐', 'align-left'],
-      ['center', '居中', 'align-center'],
-      ['right', '右对齐', 'align-right'],
-    ]) {
-      menu.button(s, label, icon, () => act('style', { align: value }), {
-        active: (block.style?.align || 'left') === value,
-      });
-    }
-    menu.button(s, '增加缩进', 'indent-increase', () => act('indent', 1));
-    menu.button(s, '减少缩进', 'indent-decrease', () => act('indent', -1));
+    head('块对齐', true);
+    root.append(el(doc, 'div', 'flow-picker-description', '应用于当前整个内容块'));
+    styleOptions(menu, doc, block, 'align', (style) => act('style', style));
+    const indent = section();
+    menu.button(indent, '增加缩进', 'indent-increase', () => act('indent', 1));
+    menu.button(indent, '减少缩进', 'indent-decrease', () => act('indent', -1));
     menu.position();
     menu.focus();
   }
@@ -479,7 +466,6 @@ function typeMenu(options: TypeMenuOptions) {
       });
       b.setAttribute('role', 'menuitemradio');
       b.setAttribute('aria-checked', String(block.type === item.id));
-      if (block.type === item.id) b.append(icon(doc, 'check', options.setIcon));
     }
   }
   menu.position();
@@ -522,20 +508,22 @@ function calloutTypeMenu(options: TypeMenuOptions) {
   menu.focus();
   return menu;
 }
-function styleMenu(options: StyleMenuOptions) {
-  const { doc, block, choose, mode } = options,
-    menu = openPopup({ ...options, label: mode === 'align' ? '块对齐' : '块颜色' });
-  menu.root.append(
-    el(doc, 'div', 'flow-picker-title', mode === 'align' ? '块对齐' : '块颜色'),
-    el(doc, 'div', 'flow-picker-description', '应用于当前整个内容块'),
-  );
+function styleOptions(
+  menu: ReturnType<typeof openPopup>,
+  doc: Document,
+  block: Block,
+  mode: 'align' | 'color',
+  choose: (style: Partial<BlockStyle>) => unknown,
+) {
   if (mode === 'align') {
+    const section = el(doc, 'div', 'flow-menu-section');
+    menu.root.append(section);
     for (const [align, label, name] of [
       ['left', '左对齐', 'align-left'],
       ['center', '居中', 'align-center'],
       ['right', '右对齐', 'align-right'],
     ])
-      menu.button(menu.root, label, name, () => choose({ align }), {
+      menu.button(section, label, name, () => choose({ align }), {
         active: (block.style?.align || 'left') === align,
       });
   } else
@@ -543,9 +531,11 @@ function styleMenu(options: StyleMenuOptions) {
       ['color', COLORS, '文字颜色'],
       ['background', BACKGROUNDS, '背景颜色'],
     ] as const) {
-      menu.root.append(el(doc, 'div', 'flow-section-label', label));
+      const section = el(doc, 'div', 'flow-menu-section');
+      menu.root.append(section);
+      section.append(el(doc, 'div', 'flow-section-label', label));
       const grid = el(doc, 'div', 'flow-color-grid');
-      menu.root.append(grid);
+      section.append(grid);
       for (const value of values) {
         const b = menu.button(
           grid,
@@ -557,6 +547,15 @@ function styleMenu(options: StyleMenuOptions) {
         b.classList.add('flow-swatch', `flow-${key}-${value}`);
       }
     }
+}
+function styleMenu(options: StyleMenuOptions) {
+  const { doc, block, choose, mode } = options,
+    menu = openPopup({ ...options, label: mode === 'align' ? '块对齐' : '块颜色' });
+  menu.root.append(
+    el(doc, 'div', 'flow-picker-title', mode === 'align' ? '块对齐' : '块颜色'),
+    el(doc, 'div', 'flow-picker-description', '应用于当前整个内容块'),
+  );
+  styleOptions(menu, doc, block, mode, choose);
   menu.position();
   menu.focus();
   return menu;

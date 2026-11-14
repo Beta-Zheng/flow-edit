@@ -29,6 +29,47 @@ test('block menu conversion, palette and alignment dispatch real actions', () =>
   assert.deepEqual(actions.pop(), ['style', { align: 'center' }]);
   dom.window.close();
 });
+test('block and toolbar appearance panels share choices, selection and return navigation', () => {
+  const { dom, doc } = host();
+  const block = c.blocks('<!-- flow-edit align=center color=blue background=none -->\n正文')[0];
+  const choices = (root) =>
+    [...root.querySelectorAll('.flow-menu-section button')].map((b) => ({
+      label: b.getAttribute('aria-label'),
+      active: b.classList.contains('is-active'),
+      checks: b.querySelectorAll('.flow-option-check').length,
+    }));
+  for (const [mode, label] of [
+    ['color', '颜色'],
+    ['align', '缩进和对齐'],
+  ]) {
+    const actions = [];
+    const menu = ui.blockMenu({ doc, anchor, block, act: (...args) => actions.push(args) });
+    const next = menu.root.querySelector(`[aria-label="${label}"]`);
+    assert.equal(next.querySelector('.flow-chevron').getAttribute('aria-hidden'), 'true');
+    next.click();
+    const embedded = choices(menu.root);
+    menu.root.querySelector('[aria-label="返回"]').click();
+    assert.ok(menu.root.querySelector('[aria-label="复制"]'));
+    menu.close();
+    const standalone = ui.styleMenu({
+      doc,
+      anchor,
+      block,
+      mode,
+      choose: (style) => actions.push(style),
+    });
+    const direct = choices(standalone.root);
+    assert.deepEqual(mode === 'align' ? embedded.slice(0, 3) : embedded, direct);
+    assert.ok(direct.some((item) => item.active && item.checks === 1));
+    standalone.root
+      .querySelector(mode === 'align' ? '[aria-label="右对齐"]' : '.flow-color-red')
+      .click();
+    assert.deepEqual(actions.pop(), mode === 'align' ? { align: 'right' } : { color: 'red' });
+    assert.equal(standalone.closed, true);
+  }
+  dom.window.close();
+});
+
 test('insert search filters, keyboard chooses, Escape and outside clicks dismiss', () => {
   const { dom, doc } = host(),
     chosen = [];
