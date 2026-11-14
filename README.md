@@ -1,5 +1,7 @@
 # Flow Edit · 流式编辑
 
+[![插件下载量](https://img.shields.io/github/downloads/Beta-Zheng/flow-edit/main.js.svg?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&displayAssetName=false&color=5b8def)](https://github.com/Beta-Zheng/flow-edit/releases "各版本 main.js 累计下载次数")
+
 为 Obsidian 提供斜杠插入、块操作和选区格式工具。建议使用「实时预览」。
 
 ## 插件功能
